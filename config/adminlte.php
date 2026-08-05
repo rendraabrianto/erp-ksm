@@ -14,7 +14,7 @@ return [
     |
     */
 
-    'title' => 'AdminLTE 3',
+    'title' => 'Aplikasi KSM Group',
     'title_prefix' => '',
     'title_postfix' => '',
 
@@ -63,7 +63,7 @@ return [
     |
     */
 
-    'logo' => '<b>Admin</b>LTE',
+    'logo' => '<b>KSM</b>Group',
     'logo_img' => 'vendor/adminlte/dist/img/AdminLTELogo.png',
     'logo_img_class' => 'brand-image img-circle elevation-3',
     'logo_img_xl' => null,
@@ -299,99 +299,127 @@ return [
     */
 
     'menu' => [
-        // Navbar items:
+
         [
-            'type' => 'navbar-search',
-            'text' => 'search',
-            'topnav_right' => true,
-        ],
-        [
-            'type' => 'fullscreen-widget',
-            'topnav_right' => true,
+            'text' => 'Dashboard',
+            'url'  => 'dashboard',
+            'icon' => 'fas fa-fw fa-tachometer-alt',
         ],
 
-        // Sidebar items:
         [
-            'type' => 'sidebar-menu-search',
-            'text' => 'search',
+            'header' => 'MASTER DATA',
         ],
+
         [
-            'text' => 'blog',
-            'url' => 'admin/blog',
-            'can' => 'manage-blog',
+            'text' => 'Companies',
+            'route' => 'companies.index',
+            'icon' => 'fas fa-building',
         ],
+
         [
-            'text' => 'pages',
-            'url' => 'admin/pages',
-            'icon' => 'far fa-fw fa-file',
-            'label' => 4,
-            'label_color' => 'success',
+            'text' => 'Branches',
+            'icon' => 'fas fa-code-branch',
+            'url' => 'branches',
         ],
-        ['header' => 'account_settings'],
+
         [
-            'text' => 'profile',
-            'url' => 'admin/settings',
-            'icon' => 'fas fa-fw fa-user',
+            'text' => 'Users',
+            'icon' => 'fas fa-users',
+            'url' => 'users',
         ],
+
         [
-            'text' => 'change_password',
-            'url' => 'admin/settings',
-            'icon' => 'fas fa-fw fa-lock',
+            'text' => 'Roles',
+            'url'  => 'roles',
+            'icon' => 'fas fa-user-shield',
         ],
+
         [
-            'text' => 'multilevel',
-            'icon' => 'fas fa-fw fa-share',
-            'submenu' => [
-                [
-                    'text' => 'level_one',
-                    'url' => '#',
-                ],
-                [
-                    'text' => 'level_one',
-                    'url' => '#',
-                    'submenu' => [
-                        [
-                            'text' => 'level_two',
-                            'url' => '#',
-                        ],
-                        [
-                            'text' => 'level_two',
-                            'url' => '#',
-                            'submenu' => [
-                                [
-                                    'text' => 'level_three',
-                                    'url' => '#',
-                                ],
-                                [
-                                    'text' => 'level_three',
-                                    'url' => '#',
-                                ],
-                            ],
-                        ],
-                    ],
-                ],
-                [
-                    'text' => 'level_one',
-                    'url' => '#',
-                ],
-            ],
+            'text' => 'Permissions',
+            'url'  => '#',
+            'icon' => 'fas fa-key',
         ],
-        ['header' => 'labels'],
+
         [
-            'text' => 'important',
-            'icon_color' => 'red',
-            'url' => '#',
+            'header' => 'ACCOUNTING',
         ],
+
         [
-            'text' => 'warning',
-            'icon_color' => 'yellow',
-            'url' => '#',
+            'text' => 'Chart Of Accounts',
+            'url'  => '#',
+            'icon' => 'fas fa-book',
         ],
+
         [
-            'text' => 'information',
-            'icon_color' => 'cyan',
-            'url' => '#',
+            'text' => 'Journal Entry',
+            'url'  => '#',
+            'icon' => 'fas fa-file-invoice-dollar',
         ],
+
+        [
+            'text' => 'General Ledger',
+            'url'  => '#',
+            'icon' => 'fas fa-balance-scale',
+        ],
+
+        [
+            'header' => 'INVENTORY',
+        ],
+
+        [
+            'text' => 'Items',
+            'url'  => '#',
+            'icon' => 'fas fa-box',
+        ],
+
+        [
+            'text' => 'Warehouses',
+            'icon' => 'fas fa-warehouse',
+            'url'  => 'warehouses',
+        ],
+
+        [
+            'header' => 'PURCHASING',
+        ],
+
+        [
+            'text' => 'Purchase Requisition',
+            'url'  => '#',
+            'icon' => 'fas fa-shopping-cart',
+        ],
+
+        [
+            'header' => 'SALES',
+        ],
+
+        [
+            'text' => 'Customers',
+            'url'  => '#',
+            'icon' => 'fas fa-user-tie',
+        ],
+
+        [
+            'header' => 'SYSTEM',
+        ],
+
+        [
+            'text' => 'Settings',
+            'url'  => '#',
+            'icon' => 'fas fa-cogs',
+        ],
+
+        [
+            'text' => 'Document Sequence',
+            'url'  => '#',
+            'icon' => 'fas fa-sort-numeric-up',
+        ],
+
+        [
+            'text' => 'Audit Log',
+            'url'  => '#',
+            'icon' => 'fas fa-history',
+        ],
+
     ],
 
     /*
@@ -430,7 +458,7 @@ return [
 
     'plugins' => [
         'Datatables' => [
-            'active' => false,
+            'active' => true,
             'files' => [
                 [
                     'type' => 'js',

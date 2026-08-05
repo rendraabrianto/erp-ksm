@@ -2,9 +2,7 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -13,21 +11,23 @@ use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable([
-    'company_id',
-    'branch_id',
-    'name',
-    'email',
-    'password',
-    'is_active',
-    'last_login_at',
-])]
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     use HasFactory;
     use Notifiable;
     use HasRoles;
+
+    protected $fillable = [
+        'name',
+        'email',
+        'password',
+        'company_id',
+        'branch_id',
+        'is_active',
+    ];
 
     protected function casts(): array
     {
@@ -47,5 +47,13 @@ class User extends Authenticatable
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    public function journals(): HasMany
+    {
+        return $this->hasMany(
+            Journal::class,
+            'created_by'
+        );
     }
 }

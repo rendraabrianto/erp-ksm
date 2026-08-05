@@ -13,6 +13,12 @@ class DatabaseSeeder extends Seeder
             BranchSeeder::class,
             RoleSeeder::class,
             SuperAdminSeeder::class,
+            WarehouseSeeder::class,
+            UomSeeder::class,
+            ItemCategorySeeder::class,
+            AccountGroupSeeder::class,
+            AccountSeeder::class,
+            DocumentSequenceSeeder::class,
         ]);
     }
 }
