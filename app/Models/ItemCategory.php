@@ -15,6 +15,10 @@ class ItemCategory extends Model
         'name',
         'description',
         'is_active',
+
+        'inventory_account_id',
+        'cogs_account_id',
+        'sales_account_id',
     ];
 
     protected $casts = [
@@ -24,5 +28,29 @@ class ItemCategory extends Model
     public function items(): HasMany
     {
         return $this->hasMany(Item::class);
+    }
+
+    public function inventoryAccount()
+    {
+        return $this->belongsTo(
+            Account::class,
+            'inventory_account_id'
+        );
+    }
+
+    public function cogsAccount()
+    {
+        return $this->belongsTo(
+            Account::class,
+            'cogs_account_id'
+        );
+    }
+
+    public function salesAccount()
+    {
+        return $this->belongsTo(
+            Account::class,
+            'sales_account_id'
+        );
     }
 }

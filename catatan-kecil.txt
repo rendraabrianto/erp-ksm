@@ -1,0 +1,8 @@
+ItemController.php
+->> masih dump belum dipindahkan ke Service atau Repository.
+->> mig stock ledger
+
+
+Inventory Account  = 4  → 1201 Persediaan Pakan
+Gain Account       = 16 → 4901 Pendapatan Selisih Persediaan
+Loss Account       = 17 → 6901 Beban Selisih Persediaan

@@ -63,14 +63,7 @@
 
                         </a>
 
-                                    <a href="{{ route('companies.destroy', $company) }}" method="POST"
-                                        class="inline-block"
-                                        onsubmit="return confirm('Hapus perusahaan ini?')">
-                                        
-                                        DELETE
 
-                                        
-                    </a>
 
                     </td>
 

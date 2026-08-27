@@ -47,20 +47,67 @@ class JournalPostingService
     )
     {
         $this->validateBalance($entry);
+        if (
+                $entry->reconciliationKey !== null
+                &&
+                Journal::where(
+                    'reconciliation_key',
+                    $entry->reconciliationKey
+                )->exists()
+            ) {
+                throw new \RuntimeException(
+                    'Reconciliation journal already posted: '
+                    .
+                    $entry->reconciliationKey
+                );
+            }
 
         return DB::transaction(function () use ($entry) {
 
+            // $journal = $this->journalRepository->create([
+            //     'journal_date' => now(),
+
+            //     'journal_no' => $this
+            //         ->documentSequenceService
+            //         ->next('JV'),
+
+            //     'reference_type' => $entry->referenceType,
+            //     'reference_id' => $entry->referenceId,
+            //     'description' => $entry->description,
+            //     'created_by' => $entry->createdBy,
+            // ]);
+
             $journal = $this->journalRepository->create([
-                'journal_date' => now(),
 
-                'journal_no' => $this
-                    ->documentSequenceService
-                    ->next('JV'),
+                'journal_date' =>
+                    $entry->journalDate
+                        ?? now()->toDateString(),
 
-                'reference_type' => $entry->referenceType,
-                'reference_id' => $entry->referenceId,
-                'description' => $entry->description,
-                'created_by' => $entry->createdBy,
+                'journal_no' =>
+                    $this
+                        ->documentSequenceService
+                        ->next('JV'),
+
+                'reference_type' =>
+                    $entry->referenceType,
+
+                'reference_id' =>
+                    $entry->referenceId,
+
+                'journal_purpose' =>
+                    $entry->journalPurpose,
+
+                'source_journal_id' =>
+                    $entry->sourceJournalId,
+
+                'reconciliation_key' =>
+                    $entry->reconciliationKey,
+
+                'description' =>
+                    $entry->description,
+
+                'created_by' =>
+                    $entry->createdBy,
             ]);
 
             $this->auditLogService->log(
@@ -69,11 +116,21 @@ class JournalPostingService
                 referenceType: Journal::class,
                 referenceId: $journal->id,
                 oldValues: null,
+                // newValues: [
+                //     'journal_no' => $journal->journal_no,
+                //     'description' => $journal->description,
+                //     'reference_type' => $journal->reference_type,
+                //     'reference_id' => $journal->reference_id,
+                // ]
                 newValues: [
+
                     'journal_no' => $journal->journal_no,
                     'description' => $journal->description,
                     'reference_type' => $journal->reference_type,
                     'reference_id' => $journal->reference_id,
+                    'journal_purpose' => $journal->journal_purpose,
+                    'source_journal_id' => $journal->source_journal_id,
+                    'reconciliation_key' => $journal->reconciliation_key,
                 ]
             );
 

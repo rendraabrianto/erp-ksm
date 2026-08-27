@@ -307,75 +307,119 @@ return [
         ],
 
         [
-            'header' => 'MASTER DATA',
-        ],
-
-        [
-            'text' => 'Companies',
-            'route' => 'companies.index',
-            'icon' => 'fas fa-building',
-        ],
-
-        [
-            'text' => 'Branches',
+            'text' => 'MASTER DATA',
             'icon' => 'fas fa-code-branch',
-            'url' => 'branches',
+            'submenu' => [
+                [
+                    'text' => 'Companies',
+                    'route' => 'companies.index',
+                    // 'icon' => 'fas fa-building',
+                ],
+                [
+                    'text' => 'Branches',
+                    // 'icon' => 'fas fa-code-branch',
+                    'url' => 'branches',
+                ],
+                [
+                    'text' => 'Users',
+                    // 'icon' => 'fas fa-users',
+                    'url' => 'users',
+                ],
+                [
+                    'text' => 'Roles',
+                    'url'  => 'roles',
+                    // 'icon' => 'fas fa-user-shield',
+                ],
+                [
+                    'text' => 'Permissions',
+                    'url'  => '#',
+                    // 'icon' => 'fas fa-key',
+                ],
+            ],
         ],
 
         [
-            'text' => 'Users',
-            'icon' => 'fas fa-users',
-            'url' => 'users',
+            'text' => 'ACCOUNTING',
+            'icon' => 'fas fa-fw fa-balance-scale',
+            'submenu' => [
+                [
+                    'text' => 'Chart Of Accounts',
+            	    'url'  => '#',
+                    // 'icon' => 'fas fa-book',
+                ],
+                [
+                    'text' => 'Journal Entry',
+                    'url'  => '#',
+                    // 'icon' => 'fas fa-file-invoice-dollar',
+                ],
+                [
+                    'text' => 'General Ledger',
+                    'url'  => '#',
+                    // 'icon' => 'fas fa-balance-scale',
+                ],
+            ],
         ],
 
         [
-            'text' => 'Roles',
-            'url'  => 'roles',
-            'icon' => 'fas fa-user-shield',
-        ],
-
-        [
-            'text' => 'Permissions',
-            'url'  => '#',
-            'icon' => 'fas fa-key',
-        ],
-
-        [
-            'header' => 'ACCOUNTING',
-        ],
-
-        [
-            'text' => 'Chart Of Accounts',
-            'url'  => '#',
-            'icon' => 'fas fa-book',
-        ],
-
-        [
-            'text' => 'Journal Entry',
-            'url'  => '#',
-            'icon' => 'fas fa-file-invoice-dollar',
-        ],
-
-        [
-            'text' => 'General Ledger',
-            'url'  => '#',
-            'icon' => 'fas fa-balance-scale',
-        ],
-
-        [
-            'header' => 'INVENTORY',
-        ],
-
-        [
-            'text' => 'Items',
-            'url'  => '#',
-            'icon' => 'fas fa-box',
-        ],
-
-        [
-            'text' => 'Warehouses',
-            'icon' => 'fas fa-warehouse',
-            'url'  => 'warehouses',
+            'text' => 'Inventory',
+            'icon' => 'fas fa-boxes',
+            'submenu' => [
+                [
+                    'text' => 'Items',
+                    'url'  => 'items',
+                    // 'icon' => 'fas fa-box',
+                ],
+                [
+                    'text' => 'Warehouse',
+                    'url'  => 'warehouses',
+                    // 'icon' => 'fas fa-warehouse',
+                ],
+                [
+                    'text' => 'UOM',
+                    'url'  => 'uoms',
+                    // 'icon' => 'fas fa-warehouse',
+                ],
+                [
+                    'text' => 'Item Category',
+                    'url'  => 'item-categories',
+                ],
+                [
+                    'text' => 'Current Stock',
+                    'route' => 'erp.inventory.current-stock.index',
+                    // 'icon' => 'fas fa-fw fa-boxes',
+                    'can' => 'inventory.current-stock.view',
+                ],
+                [
+                    'text' => 'Stock Ledger',
+                    'route' => 'erp.inventory.stock-ledger.index',
+                    // 'icon' => 'fas fa-fw fa-list-alt',
+                    'can' => 'inventory.stock-ledger.view',
+                ],
+                [
+                    'text' => 'Inventory Valuation',
+                    'route' => 'erp.inventory.valuation.index',
+                    // 'icon' => 'fas fa-fw fa-calculator',
+                    'can' => 'inventory.valuation.view',
+                ],
+                [
+                    'text' => 'Stock Adjustment',
+                    'route' => 'erp.inventory.adjustment.index',
+                    // 'icon' => 'fas fa-fw fa-sliders-h',
+                    'can' => 'inventory.adjustment.view',
+                ],
+                [
+                    'text' => 'Inventory Reconciliation',
+                    'route' => 'erp.inventory.reconciliation.index',
+                    // 'icon' => 'fas fa-fw fa-balance-scale',
+                    'can' => 'inventory.reconciliation.view',
+                ],
+                [
+                    'text' => 'Reconciliation History',
+                    'route' => 'erp.inventory.reconciliation.history',
+                    // 'icon' => 'fas fa-history',
+                    'can' => 'inventory.reconciliation.view',
+                ],
+            ],
         ],
 
         [
@@ -420,6 +464,7 @@ return [
             'icon' => 'fas fa-history',
         ],
 
+        
     ],
 
     /*

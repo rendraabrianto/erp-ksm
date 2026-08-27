@@ -13,5 +13,9 @@ class JournalEntryDTO
         public string $description,
         public int $createdBy,
         public array $lines,
+        public ?string $journalDate = null,
+        public string $journalPurpose = 'NORMAL',
+        public ?int $sourceJournalId = null,
+        public ?string $reconciliationKey = null,
     ) {}
 }
