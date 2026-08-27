@@ -25,3 +25,19 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Database dumps
+*.sql
+
+# Local archives / backups
+*.rar
+*.zip
+*.7z
+
+# Local notes / temporary files
+dropColumn(
