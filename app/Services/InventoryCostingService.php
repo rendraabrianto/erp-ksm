@@ -6,6 +6,34 @@ use App\Models\StockLedger;
 
 class InventoryCostingService
 {
+        /**
+     * Get latest inventory transaction date
+     * for a warehouse-item combination.
+     */
+    public function getLatestTransactionDate(
+        int $warehouseId,
+        int $itemId
+    ): ?string {
+
+        $latestDate =
+            StockLedger::query()
+                ->where(
+                    'warehouse_id',
+                    $warehouseId
+                )
+                ->where(
+                    'item_id',
+                    $itemId
+                )
+                ->max(
+                    'transaction_date'
+                );
+
+        return $latestDate
+            ? (string) $latestDate
+            : null;
+    }
+
     /**
      * Rekonstruksi posisi costing inventory.
      *

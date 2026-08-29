@@ -72,7 +72,55 @@ class InventoryTransactionService
                             $dto->itemId
                         );
 
+                
                 /*
+                |--------------------------------------------------------------------------
+                | Backdated Transaction Guard
+                |--------------------------------------------------------------------------
+                |
+                | Moving-average inventory saat ini belum mendukung automatic
+                | historical recost/rebuild.
+                |
+                | Karena itu transaksi tidak boleh dimasukkan sebelum tanggal
+                | transaksi terakhir untuk kombinasi warehouse + item.
+                |
+                | Transaksi pada tanggal yang sama tetap diperbolehkan.
+                |
+                */
+
+                $latestTransactionDate =
+                    $this
+                        ->costingService
+                        ->getLatestTransactionDate(
+                            warehouseId:
+                                $dto->warehouseId,
+
+                            itemId:
+                                $dto->itemId
+                        );
+
+                if (
+                    $latestTransactionDate !== null
+                    &&
+                    $transactionDate
+                        <
+                    $latestTransactionDate
+                ) {
+
+                    throw new \RuntimeException(
+                        sprintf(
+                            'Backdated inventory transaction is not allowed. '
+                            . 'Transaction date %s is earlier than latest inventory date %s '
+                            . 'for warehouse %d and item %d.',
+                            $transactionDate,
+                            $latestTransactionDate,
+                            $dto->warehouseId,
+                            $dto->itemId
+                        )
+                    );
+                }
+
+                /*               
                 |--------------------------------------------------------------------------
                 | STOCK IN
                 |--------------------------------------------------------------------------
