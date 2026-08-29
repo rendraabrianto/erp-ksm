@@ -19,6 +19,9 @@ class PermissionSeeder extends Seeder
             'inventory.adjustment.view',
             'inventory.adjustment.create',
             'inventory.adjustment.post',
+            'inventory.transfer.view',
+            'inventory.transfer.create',
+            'inventory.transfer.post',
             'accounting.journal.view',
         ];
 

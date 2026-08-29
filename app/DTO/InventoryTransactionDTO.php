@@ -13,5 +13,18 @@ class InventoryTransactionDTO
         public float $qtyOut,
         public float $unitCost,
         public ?string $remarks = null,
+
+        /*
+        |--------------------------------------------------------------------------
+        | Transaction Date
+        |--------------------------------------------------------------------------
+        |
+        | Nullable untuk backward compatibility.
+        |
+        | Existing caller yang belum mengirim transactionDate
+        | tetap menggunakan tanggal posting server.
+        |
+        */
+        public ?string $transactionDate = null,
     ) {}
 }

@@ -38,6 +38,9 @@ class RolePermissionSeeder extends Seeder
                 'inventory.adjustment.view',
                 'inventory.adjustment.create',
                 'inventory.adjustment.post',
+                'inventory.transfer.view',
+                'inventory.transfer.create',
+                'inventory.transfer.post',
                 'accounting.journal.view',
             ]
         )->get();
@@ -68,12 +71,23 @@ class RolePermissionSeeder extends Seeder
                 Permission::whereIn(
                     'name',
                     [
-                        'inventory.reconciliation.view',
-                        'inventory.reconciliation.preview',
-                        'inventory.reconciliation.apply',
-                        'inventory.current-stock.view',
-                        'accounting.journal.view',
-                    ]
+                    'inventory.reconciliation.view',
+                    'inventory.reconciliation.preview',
+
+                    'inventory.current-stock.view',
+                    'inventory.stock-ledger.view',
+                    'inventory.valuation.view',
+
+                    'inventory.adjustment.view',
+                    'inventory.adjustment.create',
+                    'inventory.adjustment.post',
+
+                    'inventory.transfer.view',
+                    'inventory.transfer.create',
+                    'inventory.transfer.post',
+
+                    'accounting.journal.view',
+                ]
                 )->get()
             );
         }
@@ -102,8 +116,20 @@ class RolePermissionSeeder extends Seeder
                     [
                         'inventory.reconciliation.view',
                         'inventory.reconciliation.preview',
+
                         'inventory.current-stock.view',
+                        'inventory.stock-ledger.view',
                         'inventory.valuation.view',
+
+                        'inventory.adjustment.view',
+                        'inventory.adjustment.create',
+                        'inventory.adjustment.post',
+
+                        'inventory.transfer.view',
+                        'inventory.transfer.create',
+                        'inventory.transfer.post',
+
+                        'accounting.journal.view',
                     ]
                 )->get()
             );

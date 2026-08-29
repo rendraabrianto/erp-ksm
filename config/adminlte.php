@@ -408,6 +408,12 @@ return [
                     'can' => 'inventory.adjustment.view',
                 ],
                 [
+                    'text' => 'Inventory Transfer',
+                    'route' => 'erp.inventory.transfer.index',
+                    // 'icon' => 'fas fa-fw fa-exchange-alt',
+                    'can' => 'inventory.transfer.view',
+                ],
+                [
                     'text' => 'Inventory Reconciliation',
                     'route' => 'erp.inventory.reconciliation.index',
                     // 'icon' => 'fas fa-fw fa-balance-scale',
@@ -418,7 +424,7 @@ return [
                     'route' => 'erp.inventory.reconciliation.history',
                     // 'icon' => 'fas fa-history',
                     'can' => 'inventory.reconciliation.view',
-                ],
+                ],                
             ],
         ],
 

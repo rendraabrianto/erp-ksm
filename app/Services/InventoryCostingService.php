@@ -7,38 +7,64 @@ use App\Models\StockLedger;
 class InventoryCostingService
 {
     /**
-     * Rekonstruksi posisi costing inventory
-     * berdasarkan seluruh histori stock ledger.
+     * Rekonstruksi posisi costing inventory.
      *
-     * Return:
-     * - qty
-     * - value
-     * - average_cost
+     * Jika $asOfDate diisi:
+     * hanya ledger <= tanggal tersebut yang dihitung.
      */
     public function getCurrentState(
         int $warehouseId,
-        int $itemId
+        int $itemId,
+        ?string $asOfDate = null
     ): array {
 
-        $ledgers = StockLedger::query()
+        $query =
+            StockLedger::query()
+                ->where(
+                    'warehouse_id',
+                    $warehouseId
+                )
+                ->where(
+                    'item_id',
+                    $itemId
+                );
 
-            ->where(
-                'warehouse_id',
-                $warehouseId
-            )
+        /*
+        |--------------------------------------------------------------------------
+        | Historical As Of
+        |--------------------------------------------------------------------------
+        */
 
-            ->where(
-                'item_id',
-                $itemId
-            )
+        if ($asOfDate !== null) {
 
-            ->orderBy('id')
+            $query->whereDate(
+                'transaction_date',
+                '<=',
+                $asOfDate
+            );
+        }
 
-            ->get([
-                'qty_in',
-                'qty_out',
-                'unit_cost',
-            ]);
+        /*
+        |--------------------------------------------------------------------------
+        | Business Transaction Ordering
+        |--------------------------------------------------------------------------
+        |
+        | Jangan hanya berdasarkan ID.
+        | Tanggal transaksi adalah urutan bisnis utama.
+        |
+        */
+
+        $ledgers =
+            $query
+                ->orderBy(
+                    'transaction_date'
+                )
+                ->orderBy('id')
+                ->get([
+                    'qty_in',
+                    'qty_out',
+                    'unit_cost',
+                ]);
 
         $qty = 0.0;
 
@@ -83,10 +109,6 @@ class InventoryCostingService
             |--------------------------------------------------------------------------
             | STOCK OUT
             |--------------------------------------------------------------------------
-            |
-            | HPP menggunakan current moving average
-            | sebelum barang keluar.
-            |--------------------------------------------------------------------------
             */
 
             if ($qtyOut > 0) {
@@ -117,18 +139,22 @@ class InventoryCostingService
 
             /*
             |--------------------------------------------------------------------------
-            | Hindari floating point negatif kecil
+            | Floating Point Protection
             |--------------------------------------------------------------------------
             */
 
             if (
-                abs($value) < 0.000001
+                abs($value)
+                <
+                0.000001
             ) {
                 $value = 0;
             }
 
             if (
-                abs($qty) < 0.000001
+                abs($qty)
+                <
+                0.000001
             ) {
                 $qty = 0;
             }
@@ -140,26 +166,35 @@ class InventoryCostingService
                 : 0;
 
         return [
-
             'qty' =>
-                round($qty, 4),
+                round(
+                    $qty,
+                    4
+                ),
 
             'value' =>
-                round($value, 2),
+                round(
+                    $value,
+                    2
+                ),
 
             'average_cost' =>
-                round($averageCost, 2),
+                round(
+                    $averageCost,
+                    2
+                ),
         ];
     }
 
     /**
-     * Hitung transaksi barang masuk.
+     * Calculate inbound inventory transaction.
      */
     public function calculateInbound(
         int $warehouseId,
         int $itemId,
         float $qtyIn,
-        float $unitCost
+        float $unitCost,
+        ?string $transactionDate = null
     ): array {
 
         if ($qtyIn <= 0) {
@@ -179,7 +214,8 @@ class InventoryCostingService
         $current =
             $this->getCurrentState(
                 $warehouseId,
-                $itemId
+                $itemId,
+                $transactionDate
             );
 
         $inValue =
@@ -203,7 +239,6 @@ class InventoryCostingService
                 : 0;
 
         return [
-
             'old_qty' =>
                 $current['qty'],
 
@@ -234,12 +269,13 @@ class InventoryCostingService
     }
 
     /**
-     * Hitung transaksi barang keluar.
+     * Calculate outbound inventory transaction.
      */
     public function calculateOutbound(
         int $warehouseId,
         int $itemId,
-        float $qtyOut
+        float $qtyOut,
+        ?string $transactionDate = null
     ): array {
 
         if ($qtyOut <= 0) {
@@ -252,11 +288,13 @@ class InventoryCostingService
         $current =
             $this->getCurrentState(
                 $warehouseId,
-                $itemId
+                $itemId,
+                $transactionDate
             );
 
         if (
-            $qtyOut >
+            $qtyOut
+            >
             $current['qty']
         ) {
 
@@ -267,12 +305,14 @@ class InventoryCostingService
 
         /*
         |--------------------------------------------------------------------------
-        | Moving Average sebelum barang keluar
+        | Moving Average Before OUT
         |--------------------------------------------------------------------------
         */
 
         $averageCost =
-            $current['average_cost'];
+            $current[
+                'average_cost'
+            ];
 
         $outValue =
             $qtyOut
@@ -290,7 +330,9 @@ class InventoryCostingService
             $outValue;
 
         if (
-            abs($newValue) < 0.000001
+            abs($newValue)
+            <
+            0.000001
         ) {
             $newValue = 0;
         }
@@ -301,7 +343,6 @@ class InventoryCostingService
                 : 0;
 
         return [
-
             'old_qty' =>
                 $current['qty'],
 

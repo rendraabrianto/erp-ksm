@@ -16,6 +16,7 @@ use App\Http\Controllers\ERP\CurrentStockController;
 use App\Http\Controllers\ERP\StockLedgerController;
 use App\Http\Controllers\ERP\InventoryValuationController;
 use App\Http\Controllers\ERP\InventoryAdjustmentController;
+use App\Http\Controllers\ERP\InventoryTransferController;
 use App\Http\Controllers\ERP\JournalController;
 
 /*
@@ -235,6 +236,81 @@ Route::middleware(['auth'])->group(function () {
             )
                 ->middleware(
                     'permission:inventory.adjustment.post'
+                )
+                ->name('post');
+        });
+
+    /*
+    |--------------------------------------------------------------------------
+    | Inventory - Transfers
+    |--------------------------------------------------------------------------
+    */
+
+    Route::prefix(
+        'erp/inventory/transfers'
+    )
+        ->name(
+            'erp.inventory.transfer.'
+        )
+        ->group(function () {
+
+            Route::get(
+                '/',
+                [
+                    InventoryTransferController::class,
+                    'index',
+                ]
+            )
+                ->middleware(
+                    'permission:inventory.transfer.view'
+                )
+                ->name('index');
+
+            Route::get(
+                '/create',
+                [
+                    InventoryTransferController::class,
+                    'create',
+                ]
+            )
+                ->middleware(
+                    'permission:inventory.transfer.create'
+                )
+                ->name('create');
+
+            Route::post(
+                '/',
+                [
+                    InventoryTransferController::class,
+                    'store',
+                ]
+            )
+                ->middleware(
+                    'permission:inventory.transfer.create'
+                )
+                ->name('store');
+
+            Route::get(
+                '/{transfer}',
+                [
+                    InventoryTransferController::class,
+                    'show',
+                ]
+            )
+                ->middleware(
+                    'permission:inventory.transfer.view'
+                )
+                ->name('show');
+
+            Route::post(
+                '/{transfer}/post',
+                [
+                    InventoryTransferController::class,
+                    'post',
+                ]
+            )
+                ->middleware(
+                    'permission:inventory.transfer.post'
                 )
                 ->name('post');
         });
