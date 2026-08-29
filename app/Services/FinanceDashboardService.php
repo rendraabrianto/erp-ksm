@@ -5,6 +5,7 @@ namespace App\Services;
 use App\DTO\ARAgingFilterDTO;
 use App\DTO\APAgingFilterDTO;
 use App\DTO\FinanceDashboardFilterDTO;
+use App\DTO\InventoryValuationFilterDTO;
 use App\DTO\ProfitLossFilterDTO;
 use App\Repositories\Contracts\FinanceDashboardRepositoryInterface;
 
@@ -20,6 +21,8 @@ class FinanceDashboardService
 
         private APAgingService $apAgingService,
 
+        private InventoryValuationReportService $inventoryValuationReportService,
+
     ) {}
 
     public function getDashboard(
@@ -32,8 +35,11 @@ class FinanceDashboardService
         */
 
         $cashAccounts =
-            $this->repository
-                ->getCashPosition($dto);
+            $this
+                ->repository
+                ->getCashPosition(
+                    $dto
+                );
 
         $cashPosition =
             $cashAccounts->sum(
@@ -44,11 +50,30 @@ class FinanceDashboardService
         |--------------------------------------------------------------------------
         | INVENTORY
         |--------------------------------------------------------------------------
+        |
+        | Inventory valuation menggunakan warehouse-specific moving-average
+        | melalui InventoryValuationReportService -> CurrentStockService.
+        |
+        | Dashboard valuation dihitung as-of dateTo agar konsisten dengan
+        | posisi keuangan pada tanggal laporan.
+        |
         */
 
         $inventory =
-            $this->repository
-                ->getInventoryValue();
+            $this
+                ->inventoryValuationReportService
+                ->report(
+                    new InventoryValuationFilterDTO(
+                        warehouseId:
+                            null,
+
+                        itemId:
+                            null,
+
+                        asOfDate:
+                            $dto->dateTo,
+                    )
+                );
 
         /*
         |--------------------------------------------------------------------------
@@ -57,14 +82,15 @@ class FinanceDashboardService
         */
 
         $profitLoss =
-            $this->profitLossService
+            $this
+                ->profitLossService
                 ->getReport(
                     new ProfitLossFilterDTO(
 
-                        dateFrom :
+                        dateFrom:
                             $dto->dateFrom,
 
-                        dateTo :
+                        dateTo:
                             $dto->dateTo
                     )
                 );
@@ -76,11 +102,12 @@ class FinanceDashboardService
         */
 
         $arAging =
-            $this->arAgingService
+            $this
+                ->arAgingService
                 ->getReport(
                     new ARAgingFilterDTO(
 
-                        asOfDate :
+                        asOfDate:
                             $dto->dateTo
                     )
                 );
@@ -92,11 +119,12 @@ class FinanceDashboardService
         */
 
         $apAging =
-            $this->apAgingService
+            $this
+                ->apAgingService
                 ->getReport(
                     new APAgingFilterDTO(
 
-                        asOfDate :
+                        asOfDate:
                             $dto->dateTo
                     )
                 );
@@ -108,7 +136,8 @@ class FinanceDashboardService
         */
 
         $lowStock =
-            $this->repository
+            $this
+                ->repository
                 ->getLowStockItems();
 
         /*
@@ -118,7 +147,8 @@ class FinanceDashboardService
         */
 
         $negativeBank =
-            $this->repository
+            $this
+                ->repository
                 ->getBankNegativeAccounts(
                     $dto
                 );
@@ -147,7 +177,9 @@ class FinanceDashboardService
                 $cashPosition,
 
             'inventory_value' =>
-                $inventory['total_value'],
+                $inventory[
+                    'total_inventory_value'
+                ],
 
             'outstanding_ar' =>
                 $arAging[
@@ -194,19 +226,29 @@ class FinanceDashboardService
                 ],
 
             'sales' =>
-                $profitLoss['revenue'],
+                $profitLoss[
+                    'revenue'
+                ],
 
             'cogs' =>
-                $profitLoss['cogs'],
+                $profitLoss[
+                    'cogs'
+                ],
 
             'gross_profit' =>
-                $profitLoss['gross_profit'],
+                $profitLoss[
+                    'gross_profit'
+                ],
 
             'operating_expense' =>
-                $profitLoss['expense'],
+                $profitLoss[
+                    'expense'
+                ],
 
             'net_profit' =>
-                $profitLoss['net_profit'],
+                $profitLoss[
+                    'net_profit'
+                ],
 
             /*
             |--------------------------------------------------------------------------
@@ -218,7 +260,9 @@ class FinanceDashboardService
                 $cashAccounts,
 
             'inventory_items' =>
-                $inventory['items'],
+                $inventory[
+                    'rows'
+                ],
 
             'ar_aging' =>
                 $arAging,

@@ -10,8 +10,6 @@ interface FinanceDashboardRepositoryInterface
         FinanceDashboardFilterDTO $dto
     );
 
-    public function getInventoryValue();
-
     public function getLowStockItems();
 
     public function getBankNegativeAccounts(

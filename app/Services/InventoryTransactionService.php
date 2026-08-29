@@ -31,7 +31,6 @@ class InventoryTransactionService
                     &&
                     $dto->qtyOut <= 0
                 ) {
-
                     throw new \Exception(
                         'Inventory transaction must have quantity in or quantity out.'
                     );
@@ -42,7 +41,6 @@ class InventoryTransactionService
                     &&
                     $dto->qtyOut > 0
                 ) {
-
                     throw new \Exception(
                         'Inventory transaction cannot have qty in and qty out simultaneously.'
                     );
@@ -63,16 +61,18 @@ class InventoryTransactionService
                 |--------------------------------------------------------------------------
                 | Lock Item
                 |--------------------------------------------------------------------------
+                |
+                | Lock item tetap dipertahankan sebagai serialization mutex
+                | untuk transaksi inventory item yang sama.
+                |
                 */
 
-                $item =
-                    Item::query()
-                        ->lockForUpdate()
-                        ->findOrFail(
-                            $dto->itemId
-                        );
+                Item::query()
+                    ->lockForUpdate()
+                    ->findOrFail(
+                        $dto->itemId
+                    );
 
-                
                 /*
                 |--------------------------------------------------------------------------
                 | Backdated Transaction Guard
@@ -106,7 +106,6 @@ class InventoryTransactionService
                         <
                     $latestTransactionDate
                 ) {
-
                     throw new \RuntimeException(
                         sprintf(
                             'Backdated inventory transaction is not allowed. '
@@ -120,7 +119,7 @@ class InventoryTransactionService
                     );
                 }
 
-                /*               
+                /*
                 |--------------------------------------------------------------------------
                 | STOCK IN
                 |--------------------------------------------------------------------------
@@ -147,11 +146,6 @@ class InventoryTransactionService
                                 transactionDate:
                                     $transactionDate
                             );
-
-                    $newAverageCost =
-                        $costing[
-                            'new_average_cost'
-                        ];
                 }
 
                 /*
@@ -178,11 +172,6 @@ class InventoryTransactionService
                                 transactionDate:
                                     $transactionDate
                             );
-
-                    $newAverageCost =
-                        $costing[
-                            'new_average_cost'
-                        ];
                 }
 
                 /*
@@ -234,20 +223,6 @@ class InventoryTransactionService
                             'remarks' =>
                                 $dto->remarks,
                         ]);
-
-                /*
-                |--------------------------------------------------------------------------
-                | Update Item Average Cost
-                |--------------------------------------------------------------------------
-                |
-                | Existing behavior dipertahankan untuk backward compatibility.
-                |
-                */
-
-                $item->average_cost =
-                    $newAverageCost;
-
-                $item->save();
 
                 return $ledger;
             }

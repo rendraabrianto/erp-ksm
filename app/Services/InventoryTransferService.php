@@ -6,7 +6,6 @@ use App\DTO\InventoryTransferCreateDTO;
 use App\Models\InventoryTransfer;
 use App\Models\InventoryTransferDetail;
 use App\Models\Item;
-use App\Models\StockLedger;
 use App\Models\Warehouse;
 use App\DTO\InventoryTransactionDTO;
 use Illuminate\Support\Facades\DB;
@@ -204,39 +203,34 @@ class InventoryTransferService
                     | Draft Cost Snapshot
                     |--------------------------------------------------------------------------
                     |
-                    | Kita ambil cost dari ledger terakhir source warehouse.
+                    | Cost snapshot DRAFT diambil dari moving-average state
+                    | source warehouse pada tanggal transfer.
                     |
-                    | Ini BUKAN authoritative posting cost.
-                    | Saat POST nanti cost wajib dihitung ulang.
+                    | Item.average_cost tidak digunakan karena costing inventory
+                    | harus spesifik per warehouse + item.
+                    |
+                    | Saat POST, costing tetap dihitung ulang sehingga nilai POSTED
+                    | tetap authoritative.
                     |
                     */
 
-                    $lastLedger =
-                        StockLedger::query()
-                            ->where(
-                                'warehouse_id',
-                                $dto->sourceWarehouseId
-                            )
-                            ->where(
-                                'item_id',
-                                $itemId
-                            )
-                            ->orderByDesc(
-                                'transaction_date'
-                            )
-                            ->orderByDesc(
-                                'id'
-                            )
-                            ->first();
+                    $state =
+                        $this
+                            ->costingService
+                            ->getCurrentState(
+                                warehouseId:
+                                    $dto->sourceWarehouseId,
+
+                                itemId:
+                                    $itemId,
+
+                                asOfDate:
+                                    $dto->transferDate
+                            );
 
                     $unitCost =
-                        (float) (
-                            $lastLedger?->unit_cost
-                            ??
-                            $item->average_cost
-                            ??
-                            0
-                        );
+                        (float)
+                        $state['average_cost'];
 
                     InventoryTransferDetail::create([
                         'inventory_transfer_id' =>
