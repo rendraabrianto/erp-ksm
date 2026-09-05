@@ -14,5 +14,6 @@ class GoodsReceiptDTO
         public int $warehouseId,
         public int $createdBy,
         public array $lines,
+        public ?string $receiptDate = null,
     ) {}
 }

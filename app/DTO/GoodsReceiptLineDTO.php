@@ -8,6 +8,7 @@ class GoodsReceiptLineDTO
         public int $itemId,
         public float $qty,
         public float $unitPrice,
+        public int $purchaseOrderDetailId,
         public ?string $remarks = null,
     ) {}
 }

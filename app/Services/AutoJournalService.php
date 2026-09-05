@@ -17,11 +17,13 @@ class AutoJournalService
      * Dr Persediaan
      * Cr GRNI
      */
+    
     public function goodsReceipt(
         string $inventoryAccount,
         float $amount,
         int $referenceId,
-        int $userId
+        int $userId,
+        ?string $journalDate = null,
     ): void {
 
         $entry = new JournalEntryDTO(
@@ -49,7 +51,8 @@ class AutoJournalService
                     credit      : $amount,
                     description : 'GRNI'
                 ),
-            ]
+            ],
+            journalDate: $journalDate,
         );
 
         $this->journalService->post($entry);
@@ -148,7 +151,8 @@ class AutoJournalService
         string $inventoryAccount,
         float $amount,
         int $referenceId,
-        int $userId
+        int $userId,
+        ?string $journalDate = null,
     )
     {
         $entry = new JournalEntryDTO(
@@ -177,7 +181,8 @@ class AutoJournalService
                     unitPrice   : 0,
                     description : 'Persediaan'
                 ),
-            ]
+            ],
+            journalDate: $journalDate,
         );
 
         return $this->journalService
@@ -309,5 +314,6 @@ class AutoJournalService
 
         return $this->journalService
             ->post($entry);
-    }
+    }   
+    
 }

@@ -14,16 +14,40 @@ class GoodsReceiptService
     public function __construct(
         private GoodsReceiptRepositoryInterface $repository,
         private DocumentSequenceService $documentSequenceService,
-        private InventoryTransactionService $inventoryService,
-        private AuditLogService $auditService,
+        private InventoryTransactionService $inventoryTransactionService,
         private AutoJournalService $autoJournalService,
-    ) {}
+        private AuditLogService $auditLogService,
+    ) {
+    }
 
     public function create(
         GoodsReceiptDTO $dto
     ) {
         return DB::transaction(
             function () use ($dto) {
+
+                /*
+                |--------------------------------------------------------------------------
+                | Resolve Receipt Date
+                |--------------------------------------------------------------------------
+                |
+                | Receipt date menjadi single source of truth untuk:
+                |
+                | - Goods Receipt
+                | - Stock Ledger
+                | - Journal
+                |
+                */
+
+                $receiptDate =
+                    $dto->receiptDate
+                    ?? now()->toDateString();
+
+                /*
+                |--------------------------------------------------------------------------
+                | Goods Receipt Header
+                |--------------------------------------------------------------------------
+                */
 
                 $gr =
                     $this
@@ -38,7 +62,7 @@ class GoodsReceiptService
                                 $dto->purchaseOrderId,
 
                             'receipt_date' =>
-                                now()->toDateString(),
+                                $receiptDate,
 
                             'status' =>
                                 'POSTED',
@@ -50,24 +74,135 @@ class GoodsReceiptService
                                 $dto->createdBy,
                         ]);
 
-                foreach ($dto->lines as $line) {
+                /*
+                |--------------------------------------------------------------------------
+                | Goods Receipt Lines
+                |--------------------------------------------------------------------------
+                */
+
+                foreach (
+                    $dto->lines
+                    as $line
+                ) {
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Purchase Order Detail
+                    |--------------------------------------------------------------------------
+                    |
+                    | purchaseOrderDetailId WAJIB.
+                    |
+                    | Kita tidak lagi mencari detail PO hanya berdasarkan item_id.
+                    | Dengan demikian item yang sama boleh muncul pada lebih dari
+                    | satu baris PO tanpa ambiguity.
+                    |
+                    | lockForUpdate mencegah dua proses Goods Receipt paralel
+                    | membaca remaining quantity yang sama.
+                    |
+                    */
 
                     $poDetail =
                         PurchaseOrderDetail::query()
+                            ->whereKey(
+                                $line->purchaseOrderDetailId
+                            )
                             ->where(
                                 'purchase_order_id',
                                 $dto->purchaseOrderId
                             )
-                            ->where(
-                                'item_id',
-                                $line->itemId
-                            )
+                            ->lockForUpdate()
                             ->firstOrFail();
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Validate Item Consistency
+                    |--------------------------------------------------------------------------
+                    |
+                    | Detail PO yang dipilih harus benar-benar milik item
+                    | yang dikirim pada Goods Receipt line.
+                    |
+                    */
+
+                    if (
+                        (int) $poDetail->item_id
+                        !==
+                        (int) $line->itemId
+                    ) {
+                        throw new \RuntimeException(
+                            'Goods receipt item does not match purchase order detail.'
+                        );
+                    }
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Validate Remaining Purchase Order Quantity
+                    |--------------------------------------------------------------------------
+                    */
+
+                    $orderedQty =
+                        (float)
+                        $poDetail->qty;
+
+                    $receivedQty =
+                        (float)
+                        $poDetail->received_qty;
+
+                    $remainingQty =
+                        $orderedQty
+                        -
+                        $receivedQty;
+
+                    if (
+                        (float) $line->qty
+                        >
+                        $remainingQty
+                    ) {
+                        throw new \RuntimeException(
+                            'Goods receipt exceeds remaining purchase order qty.'
+                        );
+                    }
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Item + Accounting Mapping
+                    |--------------------------------------------------------------------------
+                    */
+
+                    $item =
+                        Item::query()
+                            ->with([
+                                'category.inventoryAccount',
+                            ])
+                            ->findOrFail(
+                                $line->itemId
+                            );
+
+                    if (
+                        !$item->category
+                        ||
+                        !$item
+                            ->category
+                            ->inventoryAccount
+                    ) {
+                        throw new \RuntimeException(
+                            sprintf(
+                                'Inventory account is not configured for item %s.',
+                                $item->code
+                            )
+                        );
+                    }
 
                     /*
                     |--------------------------------------------------------------------------
                     | Goods Receipt Detail
                     |--------------------------------------------------------------------------
+                    |
+                    | Traceability:
+                    |
+                    | GR Detail
+                    |     -> Purchase Order Detail
+                    |     -> Item
+                    |
                     */
 
                     $gr
@@ -95,29 +230,29 @@ class GoodsReceiptService
                     |--------------------------------------------------------------------------
                     */
 
-                    $poDetail->increment(
-                        'received_qty',
-                        $line->qty
-                    );
+                    $poDetail
+                        ->increment(
+                            'received_qty',
+                            $line->qty
+                        );
 
                     /*
                     |--------------------------------------------------------------------------
-                    | Post Inventory
+                    | Inventory Transaction
                     |--------------------------------------------------------------------------
                     |
-                    | InventoryTransactionService adalah authoritative inventory
-                    | costing engine.
+                    | Stock IN diposting ke warehouse yang dipilih.
                     |
-                    | Moving-average cost dihitung berdasarkan kombinasi:
+                    | Costing authoritative berasal dari:
                     |
-                    | warehouse + item
+                    | warehouse_id + item_id
                     |
-                    | Item.average_cost tidak digunakan sebagai sumber costing.
+                    | Bukan dari items.average_cost.
                     |
                     */
 
                     $this
-                        ->inventoryService
+                        ->inventoryTransactionService
                         ->post(
                             new InventoryTransactionDTO(
                                 warehouseId:
@@ -133,56 +268,87 @@ class GoodsReceiptService
                                     $gr->id,
 
                                 qtyIn:
-                                    $line->qty,
+                                    (float) $line->qty,
 
                                 qtyOut:
                                     0,
 
                                 unitCost:
-                                    $line->unitPrice,
+                                    (float) $line->unitPrice,
 
                                 remarks:
-                                    'Goods Receipt'
+                                    $line->remarks
+                                    ?? 'Goods Receipt',
+
+                                transactionDate:
+                                    $receiptDate,
                             )
                         );
 
                     /*
                     |--------------------------------------------------------------------------
-                    | Last Purchase Price
+                    | Informational Last Purchase Price
                     |--------------------------------------------------------------------------
                     |
-                    | Field ini hanya menyimpan harga pembelian terakhir sebagai
-                    | informational/reference price.
+                    | last_purchase_price hanya informasi harga pembelian terakhir.
                     |
-                    | Field ini BUKAN moving-average inventory cost.
+                    | items.average_cost TIDAK diupdate.
+                    |
+                    | Moving average authoritative berasal dari warehouse
+                    | stock ledger / InventoryCostingService.
                     |
                     */
 
-                    Item::query()
-                        ->whereKey(
-                            $line->itemId
-                        )
-                        ->update([
-                            'last_purchase_price' =>
-                                $line->unitPrice,
-                        ]);
+                    $item->update([
+                        'last_purchase_price' =>
+                            $line->unitPrice,
+                    ]);
 
                     /*
                     |--------------------------------------------------------------------------
-                    | Auto Journal
+                    | Accounting Mapping
                     |--------------------------------------------------------------------------
                     */
 
+                    $inventoryAccount =
+                        $item
+                            ->category
+                            ->inventoryAccount
+                            ->code;
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Journal Amount
+                    |--------------------------------------------------------------------------
+                    |
+                    | GR transaction value:
+                    |
+                    | qty received x purchase unit price
+                    |
+                    */
+
                     $amount =
-                        $line->qty
+                        (float) $line->qty
                         *
-                        $line->unitPrice;
+                        (float) $line->unitPrice;
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Auto Journal Goods Receipt
+                    |--------------------------------------------------------------------------
+                    |
+                    | Dr Inventory
+                    | Cr GRNI
+                    |
+                    | Journal date harus sama dengan receipt date.
+                    |
+                    */
 
                     $this
                         ->autoJournalService
                         ->goodsReceipt(
                             inventoryAccount:
-                                '1201',
+                                $inventoryAccount,
 
                             amount:
                                 $amount,
@@ -191,7 +357,10 @@ class GoodsReceiptService
                                 $gr->id,
 
                             userId:
-                                $dto->createdBy
+                                $dto->createdBy,
+
+                            journalDate:
+                                $receiptDate,
                         );
                 }
 
@@ -202,7 +371,7 @@ class GoodsReceiptService
                 */
 
                 $this
-                    ->auditService
+                    ->auditLogService
                     ->log(
                         module:
                             'Goods Receipt',
@@ -222,8 +391,23 @@ class GoodsReceiptService
                         newValues: [
                             'gr_no' =>
                                 $gr->gr_no,
-                        ]
+
+                            'receipt_date' =>
+                                $receiptDate,
+
+                            'warehouse_id' =>
+                                $dto->warehouseId,
+
+                            'purchase_order_id' =>
+                                $dto->purchaseOrderId,
+                        ],
                     );
+
+                /*
+                |--------------------------------------------------------------------------
+                | Return
+                |--------------------------------------------------------------------------
+                */
 
                 return $gr->load(
                     'details'
