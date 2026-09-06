@@ -17,6 +17,13 @@ use RuntimeException;
 use Tests\Support\InventoryReconciliationTestData;
 use Tests\TestCase;
 
+use App\Models\DeliveryOrder;
+use App\Models\DeliveryOrderDetail;
+use App\Models\Journal;
+use App\Models\StockLedger;
+use App\DTO\InventoryTransactionDTO;
+use App\Services\InventoryTransactionService;
+
 class DeliveryOrderClosedLoopTest extends TestCase
 {
     use RefreshDatabase;
@@ -999,6 +1006,649 @@ class DeliveryOrderClosedLoopTest extends TestCase
                 0.0001
             );
         }
+    }
+
+    public function test_delivery_order_rejects_insufficient_warehouse_stock_and_rolls_back_everything(): void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Arrange
+        |--------------------------------------------------------------------------
+        |
+        | SO quantity dibuat lebih besar daripada stock warehouse.
+        |
+        | Dengan demikian:
+        |
+        | - SO remaining qty masih cukup
+        | - kegagalan harus berasal dari InventoryCostingService
+        | - seluruh transaksi DO harus rollback
+        |
+        */
+
+        $item =
+            Item::query()
+                ->findOrFail(
+                    $this->data['item_id']
+                );
+
+        [
+            $salesOrder,
+            $salesOrderDetail,
+        ] =
+            $this->createSalesOrder(
+                qty: 500,
+                unitPrice: 10000,
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Capture State Before Transaction
+        |--------------------------------------------------------------------------
+        */
+
+        $deliveryOrderCountBefore =
+            DeliveryOrder::query()
+                ->count();
+
+        $deliveryOrderDetailCountBefore =
+            DeliveryOrderDetail::query()
+                ->count();
+
+        $stockLedgerCountBefore =
+            StockLedger::query()
+                ->count();
+
+        $journalCountBefore =
+            Journal::query()
+                ->count();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Act
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+
+            app(DeliveryOrderService::class)
+                ->create(
+                    new DeliveryOrderDTO(
+                        salesOrderId:
+                            $salesOrder->id,
+
+                        remarks:
+                            'Insufficient warehouse stock test',
+
+                        warehouseId:
+                            $this->data['warehouse_id'],
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        lines: [
+                            new DeliveryOrderLineDTO(
+                                itemId:
+                                    $item->id,
+
+                                qty:
+                                    500,
+
+                                salesOrderDetailId:
+                                    $salesOrderDetail->id,
+
+                                remarks:
+                                    'Insufficient warehouse stock test',
+                            ),
+                        ],
+
+                        deliveryDate:
+                            '2026-08-08',
+                    )
+                );
+
+            $this->fail(
+                'Expected insufficient stock exception was not thrown.'
+            );
+
+        } catch (\Exception $exception) {
+
+            /*
+            |--------------------------------------------------------------------------
+            | Assert Exception
+            |--------------------------------------------------------------------------
+            */
+
+            $this->assertSame(
+                'Insufficient stock.',
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert Entire Transaction Rolled Back
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $deliveryOrderCountBefore,
+            DeliveryOrder::query()->count()
+        );
+
+        $this->assertSame(
+            $deliveryOrderDetailCountBefore,
+            DeliveryOrderDetail::query()->count()
+        );
+
+        $this->assertSame(
+            $stockLedgerCountBefore,
+            StockLedger::query()->count()
+        );
+
+        $this->assertSame(
+            $journalCountBefore,
+            Journal::query()->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Sales Order Must Remain Untouched
+        |--------------------------------------------------------------------------
+        */
+
+        $salesOrderDetail->refresh();
+
+        $this->assertEquals(
+            0.0,
+            (float) $salesOrderDetail->delivered_qty
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Failed DO Header Must Not Exist
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertDatabaseMissing(
+            'delivery_orders',
+            [
+                'sales_order_id' =>
+                    $salesOrder->id,
+
+                'remarks' =>
+                    'Insufficient warehouse stock test',
+            ]
+        );
+    }
+
+    public function test_delivery_order_updates_sales_order_status_from_partial_to_completed(): void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Arrange
+        |--------------------------------------------------------------------------
+        |
+        | SO Qty = 20
+        |
+        | DO #1 = 10  → SO harus PARTIAL
+        | DO #2 = 10  → SO harus COMPLETED
+        |
+        */
+
+        $item =
+            Item::query()
+                ->findOrFail(
+                    $this->data['item_id']
+                );
+
+        [
+            $salesOrder,
+            $salesOrderDetail,
+        ] =
+            $this->createSalesOrder(
+                qty: 20,
+                unitPrice: 10000,
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Initial Status
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            'APPROVED',
+            $salesOrder->status
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | First Delivery Order — Partial
+        |--------------------------------------------------------------------------
+        */
+
+        app(DeliveryOrderService::class)
+            ->create(
+                new DeliveryOrderDTO(
+                    salesOrderId:
+                        $salesOrder->id,
+
+                    remarks:
+                        'Partial delivery test',
+
+                    warehouseId:
+                        $this->data['warehouse_id'],
+
+                    createdBy:
+                        $this->data['user_id'],
+
+                    lines: [
+                        new DeliveryOrderLineDTO(
+                            itemId:
+                                $item->id,
+
+                            qty:
+                                10,
+
+                            salesOrderDetailId:
+                                $salesOrderDetail->id,
+
+                            remarks:
+                                'First partial delivery',
+                        ),
+                    ],
+
+                    deliveryDate:
+                        '2026-08-08',
+                )
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert Partial
+        |--------------------------------------------------------------------------
+        */
+
+        $salesOrder->refresh();
+        $salesOrderDetail->refresh();
+
+        $this->assertEquals(
+            10.0,
+            (float) $salesOrderDetail->delivered_qty
+        );
+
+        $this->assertSame(
+            'PARTIAL',
+            $salesOrder->status
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Second Delivery Order — Complete Remaining Qty
+        |--------------------------------------------------------------------------
+        */
+
+        app(DeliveryOrderService::class)
+            ->create(
+                new DeliveryOrderDTO(
+                    salesOrderId:
+                        $salesOrder->id,
+
+                    remarks:
+                        'Final delivery test',
+
+                    warehouseId:
+                        $this->data['warehouse_id'],
+
+                    createdBy:
+                        $this->data['user_id'],
+
+                    lines: [
+                        new DeliveryOrderLineDTO(
+                            itemId:
+                                $item->id,
+
+                            qty:
+                                10,
+
+                            salesOrderDetailId:
+                                $salesOrderDetail->id,
+
+                            remarks:
+                                'Final delivery',
+                        ),
+                    ],
+
+                    deliveryDate:
+                        '2026-08-09',
+                )
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert Completed
+        |--------------------------------------------------------------------------
+        */
+
+        $salesOrder->refresh();
+        $salesOrderDetail->refresh();
+
+        $this->assertEquals(
+            20.0,
+            (float) $salesOrderDetail->delivered_qty
+        );
+
+        $this->assertSame(
+            'COMPLETED',
+            $salesOrder->status
+        );
+    }
+
+    public function test_multiline_delivery_order_creates_one_journal_header(): void
+    {
+        $firstItem =
+            Item::query()
+                ->findOrFail(
+                    $this->data['item_id']
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Second Item
+        |--------------------------------------------------------------------------
+        */
+
+        $secondItem =
+            $firstItem->replicate();
+
+        $secondItem->code =
+            'ITEM-DO-MULTI-' . uniqid();
+
+        $secondItem->name =
+            'Second DO Multiline Item';
+
+        $secondItem->average_cost =
+            0;
+
+        $secondItem->last_purchase_price =
+            0;
+
+        $secondItem->save();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Seed Stock For Second Item
+        |--------------------------------------------------------------------------
+        |
+        | 20 units @ 4,000
+        |
+        */
+
+        app(InventoryTransactionService::class)
+        ->post(
+            new InventoryTransactionDTO(
+                warehouseId:
+                    $this->data['warehouse_id'],
+
+                itemId:
+                    $secondItem->id,
+
+                referenceType:
+                    'OPENING',
+
+                referenceId:
+                    $secondItem->id,
+
+                qtyIn:
+                    20,
+
+                qtyOut:
+                    0,
+
+                unitCost:
+                    4000,
+
+                remarks:
+                    'Opening stock second multiline item',
+
+                transactionDate:
+                    '2026-08-07',
+            )
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Sales Order
+        |--------------------------------------------------------------------------
+        */
+
+        [
+            $salesOrder,
+            $firstSoDetail,
+        ] =
+            $this->createSalesOrder(
+                qty: 10,
+                unitPrice: 10000,
+            );
+
+        $secondSoDetail =
+            $salesOrder
+                ->details()
+                ->create([
+                    'item_id' =>
+                        $secondItem->id,
+
+                    'qty' =>
+                        5,
+
+                    'unit_price' =>
+                        7000,
+
+                    'discount' =>
+                        0,
+
+                    'delivered_qty' =>
+                        0,
+
+                    'remarks' =>
+                        'Second multiline item',
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Capture Before
+        |--------------------------------------------------------------------------
+        */
+
+        $journalCountBefore =
+            Journal::query()
+                ->where(
+                    'reference_type',
+                    'DELIVERY_ORDER'
+                )
+                ->count();
+
+        $ledgerCountBefore =
+            StockLedger::query()
+                ->count();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Act
+        |--------------------------------------------------------------------------
+        */
+
+        $deliveryOrder =
+            app(DeliveryOrderService::class)
+                ->create(
+                    new DeliveryOrderDTO(
+                        salesOrderId:
+                            $salesOrder->id,
+
+                        remarks:
+                            'Multiline DO journal test',
+
+                        warehouseId:
+                            $this->data['warehouse_id'],
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        lines: [
+                            new DeliveryOrderLineDTO(
+                                itemId:
+                                    $firstItem->id,
+
+                                qty:
+                                    10,
+
+                                salesOrderDetailId:
+                                    $firstSoDetail->id,
+
+                                remarks:
+                                    'First item',
+                            ),
+
+                            new DeliveryOrderLineDTO(
+                                itemId:
+                                    $secondItem->id,
+
+                                qty:
+                                    5,
+
+                                salesOrderDetailId:
+                                    $secondSoDetail->id,
+
+                                remarks:
+                                    'Second item',
+                            ),
+                        ],
+
+                        deliveryDate:
+                            '2026-08-08',
+                    )
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Two Inventory Transactions
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $ledgerCountBefore + 2,
+            StockLedger::query()->count()
+        );
+
+        $this->assertSame(
+            2,
+            StockLedger::query()
+                ->where(
+                    'reference_type',
+                    'DELIVERY_ORDER'
+                )
+                ->where(
+                    'reference_id',
+                    $deliveryOrder->id
+                )
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | ONE Journal Header
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $journalCountBefore + 1,
+            Journal::query()
+                ->where(
+                    'reference_type',
+                    'DELIVERY_ORDER'
+                )
+                ->count()
+        );
+
+        $journals =
+            Journal::query()
+                ->where(
+                    'reference_type',
+                    'DELIVERY_ORDER'
+                )
+                ->where(
+                    'reference_id',
+                    $deliveryOrder->id
+                )
+                ->get();
+
+        $this->assertCount(
+            1,
+            $journals
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Journal Balance
+        |--------------------------------------------------------------------------
+        |
+        | First item:
+        | fixture moving average = 6,000
+        | 10 × 6,000 = 60,000
+        |
+        | Second item:
+        | opening cost = 4,000
+        | 5 × 4,000 = 20,000
+        |
+        | Total HPP = 80,000
+        |--------------------------------------------------------------------------
+        */
+
+        $journal =
+            $journals->first();
+
+        $journal->load(
+            'details.account'
+        );
+
+        $this->assertEquals(
+            80000.0,
+            (float) $journal->details->sum('debit')
+        );
+
+        $this->assertEquals(
+            80000.0,
+            (float) $journal->details->sum('credit')
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Traceability
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            '2026-08-08',
+            $journal->journal_date
+        );
+
+        $this->assertSame(
+            $deliveryOrder->id,
+            (int) $journal->reference_id
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Sales Order Completed
+        |--------------------------------------------------------------------------
+        */
+
+        $salesOrder->refresh();
+
+        $this->assertSame(
+            'COMPLETED',
+            $salesOrder->status
+        );
     }
 
     /*

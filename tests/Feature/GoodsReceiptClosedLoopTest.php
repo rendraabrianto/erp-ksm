@@ -16,6 +16,8 @@ use Mockery\MockInterface;
 use RuntimeException;
 use Tests\Support\InventoryReconciliationTestData;
 use Tests\TestCase;
+use App\Models\Journal;
+use App\Models\StockLedger;
 
 class GoodsReceiptClosedLoopTest extends TestCase
 {
@@ -1044,6 +1046,448 @@ class GoodsReceiptClosedLoopTest extends TestCase
                 0.0001
             );
         }
+    }
+
+    public function test_goods_receipt_updates_purchase_order_status_from_partial_to_completed(): void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Arrange
+        |--------------------------------------------------------------------------
+        |
+        | PO Qty = 20
+        |
+        | GR #1 = 10  → PO harus PARTIAL
+        | GR #2 = 10  → PO harus COMPLETED
+        |
+        */
+
+        $item =
+            Item::query()
+                ->findOrFail(
+                    $this->data['item_id']
+                );
+
+        [
+            $purchaseOrder,
+            $purchaseOrderDetail,
+        ] =
+            $this->createPurchaseOrder(
+                qty: 20,
+                unitPrice: 8000,
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Initial Status
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            'APPROVED',
+            $purchaseOrder->status
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | First Goods Receipt — Partial
+        |--------------------------------------------------------------------------
+        */
+
+        app(GoodsReceiptService::class)
+            ->create(
+                new GoodsReceiptDTO(
+                    purchaseOrderId:
+                        $purchaseOrder->id,
+
+                    supplierName:
+                        $purchaseOrder->supplier_name,
+
+                    remarks:
+                        'Partial receipt test',
+
+                    warehouseId:
+                        $this->data['warehouse_id'],
+
+                    createdBy:
+                        $this->data['user_id'],
+
+                    lines: [
+                        new GoodsReceiptLineDTO(
+                            itemId:
+                                $item->id,
+
+                            qty:
+                                10,
+
+                            unitPrice:
+                                8000,
+
+                            purchaseOrderDetailId:
+                                $purchaseOrderDetail->id,
+
+                            remarks:
+                                'First partial receipt',
+                        ),
+                    ],
+
+                    receiptDate:
+                        '2026-08-08',
+                )
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert Partial
+        |--------------------------------------------------------------------------
+        */
+
+        $purchaseOrder->refresh();
+        $purchaseOrderDetail->refresh();
+
+        $this->assertEquals(
+            10.0,
+            (float) $purchaseOrderDetail->received_qty
+        );
+
+        $this->assertSame(
+            'PARTIAL',
+            $purchaseOrder->status
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Second Goods Receipt — Complete Remaining Qty
+        |--------------------------------------------------------------------------
+        */
+
+        app(GoodsReceiptService::class)
+            ->create(
+                new GoodsReceiptDTO(
+                    purchaseOrderId:
+                        $purchaseOrder->id,
+
+                    supplierName:
+                        $purchaseOrder->supplier_name,
+
+                    remarks:
+                        'Final receipt test',
+
+                    warehouseId:
+                        $this->data['warehouse_id'],
+
+                    createdBy:
+                        $this->data['user_id'],
+
+                    lines: [
+                        new GoodsReceiptLineDTO(
+                            itemId:
+                                $item->id,
+
+                            qty:
+                                10,
+
+                            unitPrice:
+                                8000,
+
+                            purchaseOrderDetailId:
+                                $purchaseOrderDetail->id,
+
+                            remarks:
+                                'Final receipt',
+                        ),
+                    ],
+
+                    receiptDate:
+                        '2026-08-09',
+                )
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert Completed
+        |--------------------------------------------------------------------------
+        */
+
+        $purchaseOrder->refresh();
+        $purchaseOrderDetail->refresh();
+
+        $this->assertEquals(
+            20.0,
+            (float) $purchaseOrderDetail->received_qty
+        );
+
+        $this->assertSame(
+            'COMPLETED',
+            $purchaseOrder->status
+        );
+    }
+
+    public function test_multiline_goods_receipt_creates_one_journal_header(): void
+    {
+        $item =
+            Item::query()
+                ->findOrFail(
+                    $this->data['item_id']
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Second Item
+        |--------------------------------------------------------------------------
+        */
+
+        $secondItem =
+            $item->replicate();
+
+        $secondItem->code =
+            'ITEM-GR-MULTI-' . uniqid();
+
+        $secondItem->name =
+            'Second GR Multiline Item';
+
+        $secondItem->average_cost =
+            0;
+
+        $secondItem->last_purchase_price =
+            0;
+
+        $secondItem->save();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Purchase Order
+        |--------------------------------------------------------------------------
+        */
+
+        [
+            $purchaseOrder,
+            $firstPoDetail,
+        ] =
+            $this->createPurchaseOrder(
+                qty: 10,
+                unitPrice: 8000,
+            );
+
+        $secondPoDetail =
+            $purchaseOrder
+                ->details()
+                ->create([
+                    'item_id' =>
+                        $secondItem->id,
+
+                    'qty' =>
+                        5,
+
+                    'received_qty' =>
+                        0,
+
+                    'unit_price' =>
+                        4000,
+
+                    'remarks' =>
+                        'Second multiline item',
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Capture Before
+        |--------------------------------------------------------------------------
+        */
+
+        $journalCountBefore =
+            Journal::query()
+                ->where(
+                    'reference_type',
+                    'GOODS_RECEIPT'
+                )
+                ->count();
+
+        $ledgerCountBefore =
+            StockLedger::query()
+                ->count();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Act
+        |--------------------------------------------------------------------------
+        */
+
+        $goodsReceipt =
+            app(GoodsReceiptService::class)
+                ->create(
+                    new GoodsReceiptDTO(
+                        purchaseOrderId:
+                            $purchaseOrder->id,
+
+                        supplierName:
+                            $purchaseOrder->supplier_name,
+
+                        remarks:
+                            'Multiline GR journal test',
+
+                        warehouseId:
+                            $this->data['warehouse_id'],
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        lines: [
+                            new GoodsReceiptLineDTO(
+                                itemId:
+                                    $item->id,
+
+                                qty:
+                                    10,
+
+                                unitPrice:
+                                    8000,
+
+                                purchaseOrderDetailId:
+                                    $firstPoDetail->id,
+
+                                remarks:
+                                    'First item',
+                            ),
+
+                            new GoodsReceiptLineDTO(
+                                itemId:
+                                    $secondItem->id,
+
+                                qty:
+                                    5,
+
+                                unitPrice:
+                                    4000,
+
+                                purchaseOrderDetailId:
+                                    $secondPoDetail->id,
+
+                                remarks:
+                                    'Second item',
+                            ),
+                        ],
+
+                        receiptDate:
+                            '2026-08-08',
+                    )
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Two Inventory Transactions
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $ledgerCountBefore + 2,
+            StockLedger::query()->count()
+        );
+
+        $this->assertSame(
+            2,
+            StockLedger::query()
+                ->where(
+                    'reference_type',
+                    'GOODS_RECEIPT'
+                )
+                ->where(
+                    'reference_id',
+                    $goodsReceipt->id
+                )
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | ONE Journal Header
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $journalCountBefore + 1,
+            Journal::query()
+                ->where(
+                    'reference_type',
+                    'GOODS_RECEIPT'
+                )
+                ->count()
+        );
+
+        $journals =
+            Journal::query()
+                ->where(
+                    'reference_type',
+                    'GOODS_RECEIPT'
+                )
+                ->where(
+                    'reference_id',
+                    $goodsReceipt->id
+                )
+                ->get();
+
+        $this->assertCount(
+            1,
+            $journals
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Journal Balance
+        |--------------------------------------------------------------------------
+        |
+        | Item A = 10 × 8,000 = 80,000
+        | Item B =  5 × 4,000 = 20,000
+        |
+        | Total = 100,000
+        |--------------------------------------------------------------------------
+        */
+
+        $journal =
+            $journals->first();
+
+        $journal->load(
+            'details.account'
+        );
+
+        $this->assertEquals(
+            100000.0,
+            (float) $journal->details->sum('debit')
+        );
+
+        $this->assertEquals(
+            100000.0,
+            (float) $journal->details->sum('credit')
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Traceability
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            '2026-08-08',
+            $journal->journal_date
+        );
+
+        $this->assertSame(
+            $goodsReceipt->id,
+            (int) $journal->reference_id
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Purchase Order Completed
+        |--------------------------------------------------------------------------
+        */
+
+        $purchaseOrder->refresh();
+
+        $this->assertSame(
+            'COMPLETED',
+            $purchaseOrder->status
+        );
     }
 
     /*

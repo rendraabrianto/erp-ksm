@@ -5,6 +5,7 @@ namespace App\Services;
 use App\DTO\DeliveryOrderDTO;
 use App\DTO\InventoryTransactionDTO;
 use App\Models\Item;
+use App\Models\SalesOrder;
 use App\Models\SalesOrderDetail;
 use App\Repositories\Contracts\DeliveryOrderRepositoryInterface;
 use Illuminate\Support\Facades\DB;
@@ -26,22 +27,23 @@ class DeliveryOrderService
         return DB::transaction(
             function () use ($dto) {
 
-                /*
-                |--------------------------------------------------------------------------
-                | Resolve Delivery Date
-                |--------------------------------------------------------------------------
-                |
-                | Delivery date menjadi single source of truth untuk:
-                |
-                | - Delivery Order
-                | - Stock Ledger
-                | - Journal HPP
-                |
-                */
-
                 $deliveryDate =
                     $dto->deliveryDate
                     ?? now()->toDateString();
+
+                /*
+                |--------------------------------------------------------------------------
+                | Lock Sales Order
+                |--------------------------------------------------------------------------
+                */
+
+                $salesOrder =
+                    SalesOrder::query()
+                        ->whereKey(
+                            $dto->salesOrderId
+                        )
+                        ->lockForUpdate()
+                        ->firstOrFail();
 
                 /*
                 |--------------------------------------------------------------------------
@@ -76,6 +78,14 @@ class DeliveryOrderService
 
                 /*
                 |--------------------------------------------------------------------------
+                | Collect Journal Lines
+                |--------------------------------------------------------------------------
+                */
+
+                $journalTransactionLines = [];
+
+                /*
+                |--------------------------------------------------------------------------
                 | Process Details
                 |--------------------------------------------------------------------------
                 */
@@ -89,16 +99,6 @@ class DeliveryOrderService
                     |--------------------------------------------------------------------------
                     | Sales Order Detail
                     |--------------------------------------------------------------------------
-                    |
-                    | salesOrderDetailId WAJIB.
-                    |
-                    | Kita tidak lagi memilih detail SO hanya berdasarkan item_id.
-                    | Dengan demikian item yang sama dapat muncul pada beberapa
-                    | baris Sales Order tanpa ambiguity.
-                    |
-                    | lockForUpdate mencegah dua proses Delivery Order paralel
-                    | membaca remaining quantity yang sama.
-                    |
                     */
 
                     $soDetail =
@@ -133,11 +133,6 @@ class DeliveryOrderService
                     |--------------------------------------------------------------------------
                     | Item + Accounting Mapping
                     |--------------------------------------------------------------------------
-                    |
-                    | Item.average_cost TIDAK digunakan sebagai sumber HPP.
-                    |
-                    | Inventory dan COGS account berasal dari Item Category.
-                    |
                     */
 
                     $item =
@@ -180,7 +175,7 @@ class DeliveryOrderService
 
                     /*
                     |--------------------------------------------------------------------------
-                    | Check Remaining Sales Order Quantity
+                    | Validate Remaining SO Quantity
                     |--------------------------------------------------------------------------
                     */
 
@@ -201,18 +196,8 @@ class DeliveryOrderService
 
                     /*
                     |--------------------------------------------------------------------------
-                    | Post Inventory OUT
+                    | Inventory OUT
                     |--------------------------------------------------------------------------
-                    |
-                    | unitCost = 0 karena untuk STOCK OUT authoritative cost
-                    | dihitung InventoryCostingService berdasarkan:
-                    |
-                    | warehouse_id + item_id
-                    |
-                    | sebelum transaksi.
-                    |
-                    | Delivery date diteruskan ke InventoryTransactionService.
-                    |
                     */
 
                     $inventoryTransaction =
@@ -252,15 +237,8 @@ class DeliveryOrderService
 
                     /*
                     |--------------------------------------------------------------------------
-                    | Delivery Order Detail
+                    | DO Detail
                     |--------------------------------------------------------------------------
-                    |
-                    | sales_order_detail_id memberikan traceability langsung
-                    | terhadap baris SO yang dikirim.
-                    |
-                    | unit_cost berasal dari authoritative warehouse costing,
-                    | bukan Item.average_cost.
-                    |
                     */
 
                     $do
@@ -276,7 +254,8 @@ class DeliveryOrderService
                                 $line->qty,
 
                             'unit_cost' =>
-                                $inventoryTransaction->unit_cost,
+                                $inventoryTransaction
+                                    ->unit_cost,
 
                             'remarks' =>
                                 $line->remarks,
@@ -284,7 +263,7 @@ class DeliveryOrderService
 
                     /*
                     |--------------------------------------------------------------------------
-                    | Update Sales Order Delivered Quantity
+                    | Update Delivered Qty
                     |--------------------------------------------------------------------------
                     */
 
@@ -296,7 +275,7 @@ class DeliveryOrderService
 
                     /*
                     |--------------------------------------------------------------------------
-                    | Accounting Mapping
+                    | Accounting
                     |--------------------------------------------------------------------------
                     */
 
@@ -312,19 +291,6 @@ class DeliveryOrderService
                             ->inventoryAccount
                             ->code;
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | HPP Amount
-                    |--------------------------------------------------------------------------
-                    |
-                    | HPP berasal langsung dari InventoryTransactionService.
-                    |
-                    | Jangan menggunakan:
-                    |
-                    | qty * Item.average_cost
-                    |
-                    */
-
                     $amount =
                         (float)
                         $inventoryTransaction
@@ -332,27 +298,45 @@ class DeliveryOrderService
 
                     /*
                     |--------------------------------------------------------------------------
-                    | Auto Journal HPP
+                    | Collect Journal Data
                     |--------------------------------------------------------------------------
-                    |
-                    | Dr COGS
-                    | Cr Inventory
-                    |
-                    | Journal date harus sama dengan delivery date.
-                    |
                     */
 
+                    $journalTransactionLines[] =
+                        [
+                            'cogsAccount' =>
+                                $cogsAccount,
+
+                            'inventoryAccount' =>
+                                $inventoryAccount,
+
+                            'amount' =>
+                                $amount,
+                        ];
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | One Journal Per Delivery Order
+                |--------------------------------------------------------------------------
+                */
+
+                if (
+                    count(
+                        $journalTransactionLines
+                    ) > 0
+                ) {
                     $this
                         ->autoJournalService
                         ->deliveryOrder(
                             cogsAccount:
-                                $cogsAccount,
+                                $journalTransactionLines,
 
                             inventoryAccount:
-                                $inventoryAccount,
+                                null,
 
                             amount:
-                                $amount,
+                                null,
 
                             referenceId:
                                 $do->id,
@@ -367,7 +351,67 @@ class DeliveryOrderService
 
                 /*
                 |--------------------------------------------------------------------------
-                | Audit Log
+                | Synchronize Sales Order Status
+                |--------------------------------------------------------------------------
+                */
+
+                $soDetails =
+                    SalesOrderDetail::query()
+                        ->where(
+                            'sales_order_id',
+                            $salesOrder->id
+                        )
+                        ->get();
+
+                $hasDeliveredQuantity =
+                    $soDetails->contains(
+                        function ($detail) {
+                            return
+                                (float)
+                                $detail->delivered_qty
+                                >
+                                0;
+                        }
+                    );
+
+                $allCompleted =
+                    $soDetails->isNotEmpty()
+                    &&
+                    $soDetails->every(
+                        function ($detail) {
+                            return
+                                (float)
+                                $detail->delivered_qty
+                                >=
+                                (float)
+                                $detail->qty;
+                        }
+                    );
+
+                if (
+                    $hasDeliveredQuantity
+                    &&
+                    $allCompleted
+                ) {
+
+                    $salesOrder->status =
+                        'COMPLETED';
+
+                    $salesOrder->save();
+
+                } elseif (
+                    $hasDeliveredQuantity
+                ) {
+
+                    $salesOrder->status =
+                        'PARTIAL';
+
+                    $salesOrder->save();
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Audit
                 |--------------------------------------------------------------------------
                 */
 
@@ -401,14 +445,11 @@ class DeliveryOrderService
 
                             'sales_order_id' =>
                                 $dto->salesOrderId,
+
+                            'sales_order_status' =>
+                                $salesOrder->status,
                         ]
                     );
-
-                /*
-                |--------------------------------------------------------------------------
-                | Return
-                |--------------------------------------------------------------------------
-                */
 
                 return $do->load(
                     'details'
