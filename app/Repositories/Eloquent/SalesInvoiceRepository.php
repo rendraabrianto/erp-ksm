@@ -2,11 +2,11 @@
 
 namespace App\Repositories\Eloquent;
 
-use App\Repositories\Contracts\SalesInvoiceRepositoryInterface;
 use App\Models\SalesInvoice;
+use App\Repositories\Contracts\SalesInvoiceRepositoryInterface;
 
 class SalesInvoiceRepository
-implements SalesInvoiceRepositoryInterface
+    implements SalesInvoiceRepositoryInterface
 {
     public function create(
         array $data
@@ -15,5 +15,17 @@ implements SalesInvoiceRepositoryInterface
         return SalesInvoice::create(
             $data
         );
+    }
+
+    public function findByDeliveryOrder(
+        int $deliveryOrderId
+    )
+    {
+        return SalesInvoice::query()
+            ->where(
+                'delivery_order_id',
+                $deliveryOrderId
+            )
+            ->first();
     }
 }

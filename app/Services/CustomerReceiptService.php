@@ -6,6 +6,7 @@ use App\DTO\CustomerReceiptDTO;
 use App\Models\AccountReceivable;
 use App\Repositories\Contracts\CustomerReceiptRepositoryInterface;
 use Illuminate\Support\Facades\DB;
+use App\Models\User;
 
 class CustomerReceiptService
 {
@@ -25,17 +26,97 @@ class CustomerReceiptService
     )
     {
         return DB::transaction(function () use ($dto) {
+            /*
+            |--------------------------------------------------------------------------
+            | Resolve Company
+            |--------------------------------------------------------------------------
+            */
+
+            $user =
+                User::query()
+                    ->whereKey(
+                        $dto->createdBy
+                    )
+                    ->firstOrFail();
+
+            $companyId =
+                (int) $user->company_id;
+
+            /*
+            |--------------------------------------------------------------------------
+            | Lock Account Receivable
+            |--------------------------------------------------------------------------
+            |
+            | Prevent two receipt transactions from reading and updating
+            | the same receivable balance concurrently.
+            |
+            */
 
             $ar =
-                AccountReceivable::findOrFail(
-                    $dto->accountReceivableId
+                AccountReceivable::query()
+                    ->whereKey(
+                        $dto->accountReceivableId
+                    )
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+            /*
+            |--------------------------------------------------------------------------
+            | Validate Amount
+            |--------------------------------------------------------------------------
+            */
+
+            if ($dto->amount <= 0) {
+
+                throw new \RuntimeException(
+                    'Receipt amount must be greater than zero.'
                 );
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Validate Customer Ownership
+            |--------------------------------------------------------------------------
+            */
+
+            if (
+                (int) $ar->customer_id !==
+                (int) $dto->customerId
+            ) {
+
+                throw new \RuntimeException(
+                    'Customer does not match account receivable.'
+                );
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Validate Receivable Status
+            |--------------------------------------------------------------------------
+            */
+
+            if (
+                $ar->status === 'PAID' ||
+                (float) $ar->balance_amount <= 0
+            ) {
+
+                throw new \RuntimeException(
+                    'Account receivable is already paid.'
+                );
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Validate Receivable Balance
+            |--------------------------------------------------------------------------
+            */
 
             if (
                 $dto->amount >
-                $ar->balance_amount
+                (float) $ar->balance_amount
             ) {
-                throw new \Exception(
+
+                throw new \RuntimeException(
                     'Payment exceeds receivable balance'
                 );
             }
@@ -98,11 +179,22 @@ class CustomerReceiptService
             |--------------------------------------------------------------------------
             */
 
-            $this->autoJournalService->customerReceipt(
-                    cashBankAccountId : $dto->cashBankAccountId,
-                    amount : $dto->amount,
-                    referenceId : $receipt->id,
-                    userId : $dto->createdBy
+            $this->autoJournalService
+                ->customerReceipt(
+                    cashBankAccountId:
+                        $dto->cashBankAccountId,
+
+                    amount:
+                        $dto->amount,
+
+                    referenceId:
+                        $receipt->id,
+
+                    userId:
+                        $dto->createdBy,
+
+                    companyId:
+                        $companyId,
                 );
 
             /*
@@ -133,4 +225,5 @@ class CustomerReceiptService
             return $receipt;
         });
     }
+
 }

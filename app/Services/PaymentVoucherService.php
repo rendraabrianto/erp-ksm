@@ -6,6 +6,7 @@ use App\DTO\PaymentVoucherDTO;
 use App\Repositories\Contracts\PaymentVoucherRepositoryInterface;
 use App\Models\AccountPayable;
 use Illuminate\Support\Facades\DB;
+use App\Models\User;
 
 class PaymentVoucherService
 {
@@ -22,6 +23,12 @@ class PaymentVoucherService
     {
         return DB::transaction(
             function () use ($dto) {
+                $user = User::query()
+                        ->whereKey(
+                            $dto->createdBy
+                        )->firstOrFail();
+
+                $companyId = (int) $user->company_id;
                 $ap = AccountPayable::lockForUpdate()
                 ->findOrFail(
                     $dto->accountPayableId
@@ -99,19 +106,12 @@ class PaymentVoucherService
 
                 $this->autoJournalService
                     ->paymentVoucher(
-                        amount :
-                            $dto->amount,
-
-                        cashBankAccountId :
-                            $dto->cashBankAccountId,
-
-                        referenceId :
-                            $voucher->id,
-
-                        userId :
-                            $dto->createdBy
+                        amount: $dto->amount,
+                        cashBankAccountId: $dto->cashBankAccountId,
+                        referenceId: $voucher->id,
+                        userId: $dto->createdBy,
+                        companyId: $companyId
                     );
-
                 /*
                  * Audit
                  */

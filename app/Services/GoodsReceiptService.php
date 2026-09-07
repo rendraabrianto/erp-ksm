@@ -9,6 +9,7 @@ use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderDetail;
 use App\Repositories\Contracts\GoodsReceiptRepositoryInterface;
 use Illuminate\Support\Facades\DB;
+use App\Models\Warehouse;
 
 class GoodsReceiptService
 {
@@ -44,6 +45,16 @@ class GoodsReceiptService
                         )
                         ->lockForUpdate()
                         ->firstOrFail();
+
+                $warehouse =
+                    Warehouse::query()
+                        ->whereKey(
+                            $dto->warehouseId
+                        )
+                        ->firstOrFail();
+
+                $companyId =
+                    (int) $warehouse->company_id;
 
                 /*
                 |--------------------------------------------------------------------------
@@ -335,29 +346,32 @@ class GoodsReceiptService
                 */
 
                 if (
-                    count(
-                        $journalInventoryLines
-                    ) > 0
-                ) {
-                    $this
-                        ->autoJournalService
-                        ->goodsReceipt(
-                            inventoryAccount:
-                                $journalInventoryLines,
+                        count(
+                            $journalInventoryLines
+                        ) > 0
+                    ) {
+                        $this
+                            ->autoJournalService
+                            ->goodsReceipt(
+                                inventoryAccount:
+                                    $journalInventoryLines,
 
-                            amount:
-                                null,
+                                amount:
+                                    null,
 
-                            referenceId:
-                                $gr->id,
+                                referenceId:
+                                    $gr->id,
 
-                            userId:
-                                $dto->createdBy,
+                                userId:
+                                    $dto->createdBy,
 
-                            journalDate:
-                                $receiptDate,
-                        );
-                }
+                                companyId:
+                                    $companyId,
+
+                                journalDate:
+                                    $receiptDate,
+                            );
+                    }
 
                 /*
                 |--------------------------------------------------------------------------

@@ -1490,6 +1490,446 @@ class GoodsReceiptClosedLoopTest extends TestCase
         );
     }
 
+    public function test_goods_receipt_uses_company_grni_account_mapping(): void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Arrange — Alternative GRNI Account
+        |--------------------------------------------------------------------------
+        |
+        | Fixture default:
+        |
+        | GRNI = 2101
+        |
+        | Untuk membuktikan bahwa accounting mapping authoritative,
+        | mapping company diarahkan ke akun alternatif 2998-T.
+        |
+        */
+
+        $liabilityGroupId =
+            DB::table('account_groups')
+                ->where('code', 'LIA-T')
+                ->value('id');
+
+        $this->assertNotNull(
+            $liabilityGroupId
+        );
+
+        $alternativeGrniAccountId =
+            DB::table('accounts')
+                ->insertGetId([
+                    'account_group_id' =>
+                        $liabilityGroupId,
+
+                    'code' =>
+                        '2998-T',
+
+                    'name' =>
+                        'Alternative GRNI Test',
+
+                    'normal_balance' =>
+                        'CREDIT',
+
+                    'is_header' =>
+                        false,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Change Company Accounting Mapping
+        |--------------------------------------------------------------------------
+        */
+
+        DB::table(
+            'accounting_account_mappings'
+        )
+            ->where(
+                'company_id',
+                $this->data['company_id']
+            )
+            ->update([
+                'grni_account_id' =>
+                    $alternativeGrniAccountId,
+
+                'updated_at' =>
+                    now(),
+            ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Purchase Order
+        |--------------------------------------------------------------------------
+        */
+
+        [
+            $purchaseOrder,
+            $purchaseOrderDetail,
+        ] =
+            $this->createPurchaseOrder(
+                qty: 10,
+                unitPrice: 8000,
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Act
+        |--------------------------------------------------------------------------
+        */
+
+        $goodsReceipt =
+            app(GoodsReceiptService::class)
+                ->create(
+                    new GoodsReceiptDTO(
+                        purchaseOrderId:
+                            $purchaseOrder->id,
+
+                        supplierName:
+                            $purchaseOrder->supplier_name,
+
+                        remarks:
+                            'Dynamic GRNI mapping test',
+
+                        warehouseId:
+                            $this->data['warehouse_id'],
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        lines: [
+                            new GoodsReceiptLineDTO(
+                                itemId:
+                                    $this->data['item_id'],
+
+                                qty:
+                                    10,
+
+                                unitPrice:
+                                    8000,
+
+                                purchaseOrderDetailId:
+                                    $purchaseOrderDetail->id,
+
+                                remarks:
+                                    'Dynamic GRNI test',
+                            ),
+                        ],
+
+                        receiptDate:
+                            '2026-08-08',
+                    )
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Journal
+        |--------------------------------------------------------------------------
+        */
+
+        $journal =
+            Journal::query()
+                ->where(
+                    'reference_type',
+                    'GOODS_RECEIPT'
+                )
+                ->where(
+                    'reference_id',
+                    $goodsReceipt->id
+                )
+                ->firstOrFail();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Alternative GRNI Must Receive Credit
+        |--------------------------------------------------------------------------
+        */
+
+        $alternativeGrniLine =
+            DB::table('journal_details')
+                ->where(
+                    'journal_id',
+                    $journal->id
+                )
+                ->where(
+                    'account_id',
+                    $alternativeGrniAccountId
+                )
+                ->first();
+
+        $this->assertNotNull(
+            $alternativeGrniLine,
+            'Goods Receipt must use the company GRNI account mapping.'
+        );
+
+        $this->assertEqualsWithDelta(
+            0,
+            (float) $alternativeGrniLine->debit,
+            0.01
+        );
+
+        $this->assertEqualsWithDelta(
+            80000,
+            (float) $alternativeGrniLine->credit,
+            0.01
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Old Hard-Coded GRNI Must Not Be Used
+        |--------------------------------------------------------------------------
+        */
+
+        $oldGrniLineExists =
+            DB::table('journal_details')
+                ->where(
+                    'journal_id',
+                    $journal->id
+                )
+                ->where(
+                    'account_id',
+                    $this->data['grni_account_id']
+                )
+                ->exists();
+
+        $this->assertFalse(
+            $oldGrniLineExists,
+            'Goods Receipt must not use the old hard-coded GRNI account.'
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Journal Must Stay Balanced
+        |--------------------------------------------------------------------------
+        */
+
+        $journal->load('details');
+
+        $this->assertEqualsWithDelta(
+            80000,
+            (float) $journal->details->sum('debit'),
+            0.01
+        );
+
+        $this->assertEqualsWithDelta(
+            80000,
+            (float) $journal->details->sum('credit'),
+            0.01
+        );
+    }
+
+    public function test_goods_receipt_rolls_back_when_company_accounting_mapping_is_missing(): void
+    {
+        [
+            $purchaseOrder,
+            $purchaseOrderDetail,
+        ] =
+            $this->createPurchaseOrder(
+                qty: 10,
+                unitPrice: 8000,
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Remove Accounting Mapping
+        |--------------------------------------------------------------------------
+        */
+
+        DB::table(
+            'accounting_account_mappings'
+        )
+            ->where(
+                'company_id',
+                $this->data['company_id']
+            )
+            ->delete();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Capture Before
+        |--------------------------------------------------------------------------
+        */
+
+        $beforeGoodsReceipts =
+            DB::table('goods_receipts')
+                ->count();
+
+        $beforeDetails =
+            DB::table('goods_receipt_details')
+                ->count();
+
+        $beforeLedgers =
+            DB::table('stock_ledgers')
+                ->count();
+
+        $beforeJournals =
+            DB::table('journals')
+                ->count();
+
+        $itemBefore =
+            Item::query()
+                ->findOrFail(
+                    $this->data['item_id']
+                );
+
+        $lastPurchasePriceBefore =
+            (float)
+            $itemBefore->last_purchase_price;
+
+        /*
+        |--------------------------------------------------------------------------
+        | Act
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+
+            app(GoodsReceiptService::class)
+                ->create(
+                    new GoodsReceiptDTO(
+                        purchaseOrderId:
+                            $purchaseOrder->id,
+
+                        supplierName:
+                            $purchaseOrder->supplier_name,
+
+                        remarks:
+                            'Missing accounting mapping rollback test',
+
+                        warehouseId:
+                            $this->data['warehouse_id'],
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        lines: [
+                            new GoodsReceiptLineDTO(
+                                itemId:
+                                    $this->data['item_id'],
+
+                                qty:
+                                    10,
+
+                                unitPrice:
+                                    8000,
+
+                                purchaseOrderDetailId:
+                                    $purchaseOrderDetail->id,
+
+                                remarks:
+                                    'Missing mapping test',
+                            ),
+                        ],
+
+                        receiptDate:
+                            '2026-08-08',
+                    )
+                );
+
+            $this->fail(
+                'Expected missing accounting mapping exception was not thrown.'
+            );
+
+        } catch (\Throwable $exception) {
+
+            /*
+            |--------------------------------------------------------------------------
+            | Current Resolver Behavior
+            |--------------------------------------------------------------------------
+            |
+            | getMapping() masih memakai firstOrFail().
+            |
+            | Jadi missing mapping saat ini menghasilkan
+            | ModelNotFoundException.
+            |
+            */
+
+            $this->assertInstanceOf(
+                \RuntimeException::class,
+                $exception
+            );
+
+            $this->assertSame(
+                sprintf(
+                    'Accounting account mapping is not configured for company %d.',
+                    $this->data['company_id']
+                ),
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Full Rollback
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $beforeGoodsReceipts,
+            DB::table('goods_receipts')
+                ->count()
+        );
+
+        $this->assertSame(
+            $beforeDetails,
+            DB::table('goods_receipt_details')
+                ->count()
+        );
+
+        $this->assertSame(
+            $beforeLedgers,
+            DB::table('stock_ledgers')
+                ->count()
+        );
+
+        $this->assertSame(
+            $beforeJournals,
+            DB::table('journals')
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Purchase Order Detail Rollback
+        |--------------------------------------------------------------------------
+        */
+
+        $purchaseOrderDetail->refresh();
+
+        $this->assertEqualsWithDelta(
+            0,
+            (float)
+            $purchaseOrderDetail->received_qty,
+            0.0001
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Item Rollback
+        |--------------------------------------------------------------------------
+        */
+
+        $itemAfter =
+            Item::query()
+                ->findOrFail(
+                    $this->data['item_id']
+                );
+
+        $this->assertEqualsWithDelta(
+            $lastPurchasePriceBefore,
+            (float)
+            $itemAfter->last_purchase_price,
+            0.01
+        );
+    }
+
     /*
     |--------------------------------------------------------------------------
     | Helpers

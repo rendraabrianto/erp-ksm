@@ -10,7 +10,7 @@ class InventoryReconciliationTestData
     public static function create(): array
     {
 
-        
+
         /*
         |--------------------------------------------------------------------------
         | Document Sequence
@@ -31,7 +31,7 @@ class InventoryReconciliationTestData
             'created_at'     => now(),
             'updated_at'     => now(),
         ]);
-        
+
         /*
         |--------------------------------------------------------------------------
         | Company
@@ -176,6 +176,54 @@ class InventoryReconciliationTestData
             'is_active'        => true,
             'created_at'       => now(),
             'updated_at'       => now(),
+        ]);
+
+        $apAccountId = DB::table('accounts')->insertGetId([
+            'account_group_id' => $liabilityGroupId,
+            'code'             => '2001-T',
+            'name'             => 'Hutang Dagang Test',
+            'normal_balance'   => 'CREDIT',
+            'is_header'        => false,
+            'is_active'        => true,
+            'created_at'       => now(),
+            'updated_at'       => now(),
+        ]);
+
+        $arAccountId = DB::table('accounts')->insertGetId([
+            'account_group_id' => $assetGroupId,
+            'code'             => '1101-T',
+            'name'             => 'Piutang Dagang Test',
+            'normal_balance'   => 'DEBIT',
+            'is_header'        => false,
+            'is_active'        => true,
+            'created_at'       => now(),
+            'updated_at'       => now(),
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Accounting Control Account Mapping
+        |--------------------------------------------------------------------------
+        */
+
+        DB::table('accounting_account_mappings')->insert([
+            'company_id' =>
+                $companyId,
+
+            'grni_account_id' =>
+                $grniAccountId,
+
+            'ap_account_id' =>
+                $apAccountId,
+
+            'ar_account_id' =>
+                $arAccountId,
+
+            'created_at' =>
+                now(),
+
+            'updated_at' =>
+                now(),
         ]);
 
         /*
@@ -481,6 +529,8 @@ class InventoryReconciliationTestData
             'inventory_account_id' => $inventoryAccountId,
             'cogs_account_id'      => $cogsAccountId,
             'grni_account_id'      => $grniAccountId,
+            'ap_account_id'        => $apAccountId,
+            'ar_account_id'        => $arAccountId,
         ];
 
     }

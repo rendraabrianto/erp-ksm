@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\DTO\PurchaseInvoiceDTO;
 use App\DTO\AccountPayableDTO;
+use App\Models\User;
 
 use App\Repositories\Contracts\PurchaseInvoiceRepositoryInterface;
 
@@ -25,6 +26,15 @@ class PurchaseInvoiceService
     {
         return DB::transaction(
             function () use ($dto) {
+                $user =
+                    User::query()
+                        ->whereKey(
+                            $dto->createdBy
+                        )
+                        ->firstOrFail();
+
+                $companyId =
+                    (int) $user->company_id;
 
                 $invoice =
                     $this->repository->create([
@@ -107,9 +117,10 @@ class PurchaseInvoiceService
 
                 $this->autoJournalService
                     ->purchaseInvoice(
-                        amount      : $dto->grandTotal,
-                        referenceId : $invoice->id,
-                        userId      : $dto->createdBy
+                        amount      :$dto->grandTotal,
+                        referenceId :$invoice->id,
+                        userId      :$dto->createdBy,
+                        companyId   :$companyId
                     );
 
                 /*

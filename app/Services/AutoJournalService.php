@@ -8,7 +8,8 @@ use App\DTO\JournalLineDTO;
 class AutoJournalService
 {
     public function __construct(
-        private JournalPostingService $journalService
+        private JournalPostingService $journalService,
+        private AccountingAccountResolverService $accountResolverService,
     ) {
     }
 
@@ -25,6 +26,7 @@ class AutoJournalService
         ?float $amount,
         int $referenceId,
         int $userId,
+        int $companyId,
         ?string $journalDate = null,
     ): void {
 
@@ -110,14 +112,32 @@ class AutoJournalService
             );
         }
 
+        $grniAccount =
+            $this
+                ->accountResolverService
+                ->grni(
+                    $companyId
+                );
+
         $journalLines[] =
             new JournalLineDTO(
-                accountCode: '2101',
-                quantity: 0,
-                unitPrice: 0,
-                debit: 0,
-                credit: $totalAmount,
-                description: 'GRNI'
+                accountCode:
+                    $grniAccount->code,
+
+                quantity:
+                    0,
+
+                unitPrice:
+                    0,
+
+                debit:
+                    0,
+
+                credit:
+                    $totalAmount,
+
+                description:
+                    'GRNI'
             );
 
         $entry =
@@ -144,8 +164,23 @@ class AutoJournalService
     public function purchaseInvoice(
         float $amount,
         int $referenceId,
-        int $userId
+        int $userId,
+        int $companyId
     ) {
+        $grniAccount =
+            $this
+                ->accountResolverService
+                ->grni(
+                    $companyId
+                );
+
+        $apAccount =
+            $this
+                ->accountResolverService
+                ->accountsPayable(
+                    $companyId
+                );
+
         $entry =
             new JournalEntryDTO(
                 referenceType: 'PURCHASE_INVOICE',
@@ -155,21 +190,21 @@ class AutoJournalService
 
                 lines: [
                     new JournalLineDTO(
-                        accountCode: '2101',
-                        quantity: 0,
-                        unitPrice: 0,
-                        debit: $amount,
-                        credit: 0,
-                        description: 'Reverse GRNI'
+                        accountCode:$grniAccount->code,
+                        quantity:0,
+                        unitPrice:0,
+                        debit:$amount,
+                        credit:0,
+                        description:'Reverse GRNI'
                     ),
 
                     new JournalLineDTO(
-                        accountCode: '2001',
-                        quantity: 0,
-                        unitPrice: 0,
-                        debit: 0,
-                        credit: $amount,
-                        description: 'Account Payable'
+                        accountCode:$apAccount->code,
+                        quantity:0,
+                        unitPrice:0,
+                        debit:0,
+                        credit:$amount,
+                        description:'Account Payable'
                     ),
                 ]
             );
@@ -183,13 +218,19 @@ class AutoJournalService
         float $amount,
         int $cashBankAccountId,
         int $referenceId,
-        int $userId
+        int $userId,
+        int $companyId
     ) {
         $cashBankAccount =
             \App\Models\Account::findOrFail(
                 $cashBankAccountId
             );
 
+        $apAccount = $this
+                    ->accountResolverService
+                    ->accountsPayable(
+                        $companyId
+                    );
         $entry =
             new JournalEntryDTO(
                 referenceType: 'PAYMENT_VOUCHER',
@@ -199,7 +240,7 @@ class AutoJournalService
 
                 lines: [
                     new JournalLineDTO(
-                        accountCode: '2001',
+                        accountCode: $apAccount->code,
                         quantity: 0,
                         unitPrice: 0,
                         debit: $amount,
@@ -423,85 +464,292 @@ class AutoJournalService
     }
 
     public function salesInvoice(
-        string $salesAccount,
-        float $amount,
+        string|array $salesAccount,
+        ?float $amount,
         int $referenceId,
-        int $userId
+        int $userId,
+        int $companyId,
     ) {
+        /*
+        |--------------------------------------------------------------------------
+        | Resolve AR
+        |--------------------------------------------------------------------------
+        */
+
+        $arAccount =
+            $this
+                ->accountResolverService
+                ->accountsReceivable(
+                    $companyId
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Normalize Lines
+        |--------------------------------------------------------------------------
+        */
+
+        if (is_string($salesAccount)) {
+
+            if ($amount === null) {
+                throw new \InvalidArgumentException(
+                    'Sales invoice journal amount is required.'
+                );
+            }
+
+            $transactionLines = [
+                [
+                    'salesAccount' =>
+                        $salesAccount,
+
+                    'amount' =>
+                        (float) $amount,
+                ],
+            ];
+
+        } else {
+
+            $transactionLines =
+                $salesAccount;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Aggregate Revenue Accounts
+        |--------------------------------------------------------------------------
+        */
+
+        $aggregatedSales = [];
+        $totalAmount = 0.0;
+
+        foreach ($transactionLines as $line) {
+
+            $salesCode =
+                (string) (
+                    $line['salesAccount']
+                    ?? ''
+                );
+
+            $lineAmount =
+                (float) (
+                    $line['amount']
+                    ?? 0
+                );
+
+            if ($salesCode === '') {
+                throw new \InvalidArgumentException(
+                    'Sales invoice journal sales account is required.'
+                );
+            }
+
+            if ($lineAmount <= 0) {
+                throw new \InvalidArgumentException(
+                    'Sales invoice journal amount must be greater than zero.'
+                );
+            }
+
+            if (!isset(
+                $aggregatedSales[
+                    $salesCode
+                ]
+            )) {
+                $aggregatedSales[
+                    $salesCode
+                ] = 0.0;
+            }
+
+            $aggregatedSales[
+                $salesCode
+            ] += $lineAmount;
+
+            $totalAmount +=
+                $lineAmount;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Build Journal Lines
+        |--------------------------------------------------------------------------
+        */
+
+        $journalLines = [];
+
+        $journalLines[] =
+            new JournalLineDTO(
+                accountCode:
+                    $arAccount->code,
+
+                debit:
+                    $totalAmount,
+
+                credit:
+                    0,
+
+                quantity:
+                    0,
+
+                unitPrice:
+                    0,
+
+                description:
+                    'Piutang Dagang'
+            );
+
+        foreach (
+            $aggregatedSales
+            as $accountCode => $salesAmount
+        ) {
+            $journalLines[] =
+                new JournalLineDTO(
+                    accountCode:
+                        $accountCode,
+
+                    debit:
+                        0,
+
+                    credit:
+                        $salesAmount,
+
+                    quantity:
+                        0,
+
+                    unitPrice:
+                        0,
+
+                    description:
+                        'Penjualan'
+                );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Post Journal
+        |--------------------------------------------------------------------------
+        */
+
         $entry =
             new JournalEntryDTO(
-                referenceType: 'SALES_INVOICE',
-                referenceId: $referenceId,
-                description: 'Auto Journal Sales Invoice',
-                createdBy: $userId,
+                referenceType:
+                    'SALES_INVOICE',
 
-                lines: [
-                    new JournalLineDTO(
-                        accountCode: '1101',
-                        debit: $amount,
-                        credit: 0,
-                        quantity: 0,
-                        unitPrice: 0,
-                        description: 'Piutang Dagang'
-                    ),
+                referenceId:
+                    $referenceId,
 
-                    new JournalLineDTO(
-                        accountCode: $salesAccount,
-                        debit: 0,
-                        credit: $amount,
-                        quantity: 0,
-                        unitPrice: 0,
-                        description: 'Penjualan'
-                    ),
-                ]
+                description:
+                    'Auto Journal Sales Invoice',
+
+                createdBy:
+                    $userId,
+
+                lines:
+                    $journalLines,
             );
 
         return $this
             ->journalService
-            ->post($entry);
+            ->post(
+                $entry
+            );
     }
 
     public function customerReceipt(
         int $cashBankAccountId,
         float $amount,
         int $referenceId,
-        int $userId
+        int $userId,
+        int $companyId,
     ) {
+        /*
+        |--------------------------------------------------------------------------
+        | Resolve Cash / Bank
+        |--------------------------------------------------------------------------
+        */
+
         $cashBankAccount =
             \App\Models\Account::findOrFail(
                 $cashBankAccountId
             );
 
+        /*
+        |--------------------------------------------------------------------------
+        | Resolve Accounts Receivable
+        |--------------------------------------------------------------------------
+        */
+
+        $arAccount =
+            $this
+                ->accountResolverService
+                ->accountsReceivable(
+                    $companyId
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Journal
+        |--------------------------------------------------------------------------
+        */
+
         $entry =
             new JournalEntryDTO(
-                referenceType: 'CUSTOMER_RECEIPT',
-                referenceId: $referenceId,
-                description: 'Customer Receipt',
-                createdBy: $userId,
+                referenceType:
+                    'CUSTOMER_RECEIPT',
+
+                referenceId:
+                    $referenceId,
+
+                description:
+                    'Customer Receipt',
+
+                createdBy:
+                    $userId,
 
                 lines: [
                     new JournalLineDTO(
-                        accountCode: $cashBankAccount->code,
-                        debit: $amount,
-                        credit: 0,
-                        quantity: 0,
-                        unitPrice: 0,
-                        description: 'Kas / Bank'
+                        accountCode:
+                            $cashBankAccount->code,
+
+                        debit:
+                            $amount,
+
+                        credit:
+                            0,
+
+                        quantity:
+                            0,
+
+                        unitPrice:
+                            0,
+
+                        description:
+                            'Kas / Bank'
                     ),
 
                     new JournalLineDTO(
-                        accountCode: '1101',
-                        debit: 0,
-                        credit: $amount,
-                        quantity: 0,
-                        unitPrice: 0,
-                        description: 'Piutang Dagang'
+                        accountCode:
+                            $arAccount->code,
+
+                        debit:
+                            0,
+
+                        credit:
+                            $amount,
+
+                        quantity:
+                            0,
+
+                        unitPrice:
+                            0,
+
+                        description:
+                            'Piutang Dagang'
                     ),
                 ]
             );
 
         return $this
             ->journalService
-            ->post($entry);
+            ->post(
+                $entry
+            );
     }
 }

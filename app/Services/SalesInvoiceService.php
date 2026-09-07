@@ -8,6 +8,7 @@ use App\Models\DeliveryOrder;
 use App\Models\Item;
 use App\Repositories\Contracts\SalesInvoiceRepositoryInterface;
 use Illuminate\Support\Facades\DB;
+use App\Models\User;
 
 class SalesInvoiceService
 {
@@ -26,6 +27,21 @@ class SalesInvoiceService
     {
         return DB::transaction(function () use ($dto) {
 
+            /*
+            |--------------------------------------------------------------------------
+            | Resolve Company
+            |--------------------------------------------------------------------------
+            */
+
+            $user =
+                User::query()
+                    ->whereKey(
+                        $dto->createdBy
+                    )
+                    ->firstOrFail();
+
+            $companyId =
+                (int) $user->company_id;
             /*
             |--------------------------------------------------------------------------
             | VALIDASI DELIVERY ORDER
@@ -197,21 +213,80 @@ class SalesInvoiceService
 
             /*
             |--------------------------------------------------------------------------
-            | ACCOUNT PENJUALAN
+            | BUILD SALES JOURNAL LINES
             |--------------------------------------------------------------------------
             */
 
-            $item =
-                Item::with([
-                    'category.salesAccount'
-                ])->findOrFail(
-                    $dto->lines[0]->itemId
-                );
+            $salesJournalLines = [];
 
-            $salesAccount =
-                $item->category
-                    ->salesAccount
-                    ->code;
+            foreach ($dto->lines as $line) {
+
+                $item =
+                    Item::with([
+                        'category.salesAccount',
+                    ])
+                        ->findOrFail(
+                            $line->itemId
+                        );
+
+                $salesAccount =
+                    $item
+                        ->category
+                        ?->salesAccount;
+
+                if (!$salesAccount) {
+                    throw new \RuntimeException(
+                        sprintf(
+                            'Sales account is not configured for item %d.',
+                            $line->itemId
+                        )
+                    );
+                }
+
+                if ($salesAccount->is_header) {
+                    throw new \RuntimeException(
+                        sprintf(
+                            'Sales account for item %d cannot be a header account.',
+                            $line->itemId
+                        )
+                    );
+                }
+
+                if (!$salesAccount->is_active) {
+                    throw new \RuntimeException(
+                        sprintf(
+                            'Sales account for item %d is inactive.',
+                            $line->itemId
+                        )
+                    );
+                }
+
+                $lineAmount =
+                    (
+                        $line->qty
+                        *
+                        $line->unitPrice
+                    )
+                    -
+                    $line->discount;
+
+                if ($lineAmount <= 0) {
+                    throw new \RuntimeException(
+                        sprintf(
+                            'Sales invoice line amount for item %d must be greater than zero.',
+                            $line->itemId
+                        )
+                    );
+                }
+
+                $salesJournalLines[] = [
+                    'salesAccount' =>
+                        $salesAccount->code,
+
+                    'amount' =>
+                        (float) $lineAmount,
+                ];
+            }
 
             /*
             |--------------------------------------------------------------------------
@@ -225,20 +300,13 @@ class SalesInvoiceService
             */
 
             $this->autoJournalService
-                ->salesInvoice(
-
-                    salesAccount :
-                        $salesAccount,
-
-                    amount :
-                        $invoice->grand_total,
-
-                    referenceId :
-                        $invoice->id,
-
-                    userId :
-                        $dto->createdBy
-                );
+            ->salesInvoice(
+                salesAccount:$salesJournalLines,
+                amount:null,
+                referenceId:$invoice->id,
+                userId:$dto->createdBy,
+                companyId:$companyId,
+            );
 
             /*
             |--------------------------------------------------------------------------
