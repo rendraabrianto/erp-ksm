@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PurchaseRequest extends Model
 {
@@ -14,7 +15,15 @@ class PurchaseRequest extends Model
         'remarks',
         'status',
         'created_by',
+        'company_id',
     ];
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(
+            Company::class
+        );
+    }
 
     public function details()
     {

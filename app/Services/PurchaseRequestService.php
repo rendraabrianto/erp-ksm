@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\DTO\PurchaseRequestDTO;
 use App\Models\PurchaseRequestDetail;
+use App\Models\Warehouse;
 use App\Repositories\Contracts\PurchaseRequestRepositoryInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -13,6 +14,7 @@ class PurchaseRequestService
         private PurchaseRequestRepositoryInterface $repository,
         private DocumentSequenceService $documentSequenceService,
         private AuditLogService $auditLogService,
+        protected CompanyGuardService $companyGuardService,
     ) {}
 
     public function paginate()
@@ -22,51 +24,132 @@ class PurchaseRequestService
 
     public function create(
         PurchaseRequestDTO $dto
-    )
-    {
-        return DB::transaction(function () use ($dto) {
+    ) {
+        return DB::transaction(
+            function () use ($dto) {
 
-            $pr = $this->repository->create([
-                'pr_no' => $this
-                    ->documentSequenceService
-                    ->next('PR'),
+                /*
+                |--------------------------------------------------------------------------
+                | Resolve Company Ownership From Warehouse
+                |--------------------------------------------------------------------------
+                |
+                | Purchase Request ownership ditentukan oleh warehouse.
+                | created_by bukan ownership authority.
+                |
+                */
 
-                'pr_date' => now(),
+                $warehouse =
+                    Warehouse::query()
+                        ->whereKey(
+                            $dto->warehouseId
+                        )
+                        ->firstOrFail();
 
-                'warehouse_id' => $dto->warehouseId,
+                $companyId =
+                    (int) $warehouse->company_id;
 
-                'remarks' => $dto->remarks,
+                $this->companyGuardService->assertActorBelongsToCompany(
+                        $dto->createdBy,
+                        $companyId
+                    );
 
-                'status' => 'DRAFT',
+                /*
+                |--------------------------------------------------------------------------
+                | Create Purchase Request Header
+                |--------------------------------------------------------------------------
+                */
 
-                'created_by' => $dto->createdBy,
-            ]);
+                $pr =
+                    $this->repository->create([
+                        'company_id' =>
+                            $companyId,
 
-            foreach ($dto->lines as $line) {
+                        'pr_no' =>
+                            $this
+                                ->documentSequenceService
+                                ->next('PR'),
 
-                PurchaseRequestDetail::create([
-                    'purchase_request_id' => $pr->id,
-                    'item_id' => $line->itemId,
-                    'qty' => $line->qty,
-                    'remarks' => $line->remarks,
-                ]);
+                        'pr_date' =>
+                            now(),
+
+                        'warehouse_id' =>
+                            $dto->warehouseId,
+
+                        'remarks' =>
+                            $dto->remarks,
+
+                        'status' =>
+                            'DRAFT',
+
+                        'created_by' =>
+                            $dto->createdBy,
+                    ]);
+
+                /*
+                |--------------------------------------------------------------------------
+                | Create Details
+                |--------------------------------------------------------------------------
+                */
+
+                foreach (
+                    $dto->lines
+                    as $line
+                ) {
+                    PurchaseRequestDetail::create([
+                        'purchase_request_id' =>
+                            $pr->id,
+
+                        'item_id' =>
+                            $line->itemId,
+
+                        'qty' =>
+                            $line->qty,
+
+                        'remarks' =>
+                            $line->remarks,
+                    ]);
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Audit Log
+                |--------------------------------------------------------------------------
+                */
+
+                $this
+                    ->auditLogService
+                    ->log(
+                        module:
+                            'Purchase Request',
+
+                        action:
+                            'CREATE',
+
+                        referenceType:
+                            'PurchaseRequest',
+
+                        referenceId:
+                            $pr->id,
+
+                        oldValues:
+                            null,
+
+                        newValues: [
+                            'pr_no' =>
+                                $pr->pr_no,
+
+                            'company_id' =>
+                                $pr->company_id,
+
+                            'status' =>
+                                $pr->status,
+                        ]
+                    );
+
+                return $pr->load(
+                    'details'
+                );
             }
-
-            $this->auditLogService->log(
-                module: 'Purchase Request',
-                action: 'CREATE',
-                referenceType: 'PurchaseRequest',
-                referenceId: $pr->id,
-                oldValues: null,
-                newValues: [
-                    'pr_no' => $pr->pr_no,
-                    'status' => $pr->status,
-                ]
-            );
-
-            return $pr->load(
-                'details'
-            );
-        });
+        );
     }
 }

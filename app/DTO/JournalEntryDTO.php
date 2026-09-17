@@ -13,6 +13,7 @@ class JournalEntryDTO
         public string $description,
         public int $createdBy,
         public array $lines,
+        public int $companyId,
         public ?string $journalDate = null,
         public string $journalPurpose = 'NORMAL',
         public ?int $sourceJournalId = null,

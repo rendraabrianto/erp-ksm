@@ -284,6 +284,7 @@ class InventoryReconciliationTestData
 
         DB::table('stock_ledgers')->insert([
             [
+                'company_id'      => $companyId,
                 'warehouse_id'    => $warehouseId,
                 'item_id'         => $itemId,
                 'transaction_date'=> '2026-08-01',
@@ -299,6 +300,7 @@ class InventoryReconciliationTestData
                 'updated_at'      => now(),
             ],
             [
+                'company_id'      => $companyId,
                 'warehouse_id'    => $warehouseId,
                 'item_id'         => $itemId,
                 'transaction_date'=> '2026-08-02',
@@ -346,6 +348,7 @@ class InventoryReconciliationTestData
             $totalCost
         ]) {
             DB::table('stock_ledgers')->insert([
+                'company_id'      => $companyId,
                 'warehouse_id'     => $warehouseId,
                 'item_id'          => $itemId,
                 'transaction_date' => $date,
@@ -369,6 +372,7 @@ class InventoryReconciliationTestData
         */
 
         $grJournalId = self::journal(
+            companyId: $companyId,
             userId: $userId,
             date: '2026-08-02',
             number: 'TEST-JV-GR-100',
@@ -400,6 +404,7 @@ class InventoryReconciliationTestData
         */
 
         $do204JournalId = self::journal(
+            companyId: $companyId,
             userId: $userId,
             date: '2026-08-06',
             number: 'TEST-JV-DO-204',
@@ -431,6 +436,7 @@ class InventoryReconciliationTestData
         */
 
         $do205JournalId = self::journal(
+            companyId: $companyId,
             userId: $userId,
             date: '2026-08-07',
             number: 'TEST-JV-DO-205',
@@ -462,6 +468,7 @@ class InventoryReconciliationTestData
         */
 
         $orphanGrId = self::journal(
+            companyId: $companyId,
             userId: $userId,
             date: '2026-08-08',
             number: 'TEST-JV-ORPHAN-GR',
@@ -495,6 +502,7 @@ class InventoryReconciliationTestData
         foreach ([9992, 9993] as $index => $referenceId) {
 
             $journalId = self::journal(
+                companyId: $companyId,
                 userId: $userId,
                 date: '2026-08-08',
                 number: 'TEST-JV-ORPHAN-DO-' . ($index + 1),
@@ -536,6 +544,7 @@ class InventoryReconciliationTestData
     }
 
     private static function journal(
+        int $companyId,
         int $userId,
         string $date,
         string $number,
@@ -544,18 +553,19 @@ class InventoryReconciliationTestData
         string $description
     ): int {
         return DB::table('journals')->insertGetId([
-            'journal_date'      => $date,
-            'journal_no'        => $number,
-            'reference_type'    => $referenceType,
-            'reference_id'      => $referenceId,
-            'journal_purpose'   => 'NORMAL',
-            'source_journal_id' => null,
-            'reconciliation_key'=> null,
-            'description'       => $description,
-            'status'            => 'POSTED',
-            'created_by'        => $userId,
-            'created_at'        => now(),
-            'updated_at'        => now(),
+            'company_id'         => $companyId,
+            'journal_date'       => $date,
+            'journal_no'         => $number,
+            'reference_type'     => $referenceType,
+            'reference_id'       => $referenceId,
+            'journal_purpose'    => 'NORMAL',
+            'source_journal_id'  => null,
+            'reconciliation_key' => null,
+            'description'        => $description,
+            'status'             => 'POSTED',
+            'created_by'         => $userId,
+            'created_at'         => now(),
+            'updated_at'         => now(),
         ]);
     }
 

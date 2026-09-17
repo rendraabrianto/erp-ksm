@@ -3,10 +3,9 @@
 namespace App\Services;
 
 use App\DTO\PaymentVoucherDTO;
-use App\Repositories\Contracts\PaymentVoucherRepositoryInterface;
 use App\Models\AccountPayable;
+use App\Repositories\Contracts\PaymentVoucherRepositoryInterface;
 use Illuminate\Support\Facades\DB;
-use App\Models\User;
 
 class PaymentVoucherService
 {
@@ -15,6 +14,7 @@ class PaymentVoucherService
         private DocumentSequenceService $documentSequenceService,
         private AutoJournalService $autoJournalService,
         private AuditLogService $auditService,
+        private CompanyGuardService $companyGuardService,
     ) {}
 
     public function create(
@@ -23,16 +23,51 @@ class PaymentVoucherService
     {
         return DB::transaction(
             function () use ($dto) {
-                $user = User::query()
-                        ->whereKey(
-                            $dto->createdBy
-                        )->firstOrFail();
 
-                $companyId = (int) $user->company_id;
-                $ap = AccountPayable::lockForUpdate()
-                ->findOrFail(
-                    $dto->accountPayableId
-                );
+                /*
+                |--------------------------------------------------------------------------
+                | Account Payable Ownership Authority
+                |--------------------------------------------------------------------------
+                |
+                | Payment Voucher harus mewarisi company dari Account Payable.
+                |
+                | created_by hanya actor/audit information dan tidak boleh
+                | menentukan ownership dokumen.
+                |
+                */
+
+                $ap =
+                    AccountPayable::query()
+                        ->whereKey(
+                            $dto->accountPayableId
+                        )
+                        ->lockForUpdate()
+                        ->firstOrFail();
+
+                $companyId =
+                    (int) $ap->company_id;
+
+                /*
+                |--------------------------------------------------------------------------
+                | Actor Company Guard
+                |--------------------------------------------------------------------------
+                |
+                | Account Payable is the authoritative company ownership source.
+                | createdBy is only the payment actor.
+                |
+                */
+
+                $this->companyGuardService
+                    ->assertActorBelongsToCompany(
+                        $dto->createdBy,
+                        $companyId
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | Business Guards
+                |--------------------------------------------------------------------------
+                */
 
                 if ($ap->status === 'PAID') {
                     throw new \Exception(
@@ -41,7 +76,8 @@ class PaymentVoucherService
                 }
 
                 if (
-                    $dto->amount > $ap->balance_amount
+                    $dto->amount >
+                    $ap->balance_amount
                 ) {
                     throw new \Exception(
                         'Payment exceeds AP balance'
@@ -54,45 +90,69 @@ class PaymentVoucherService
                     );
                 }
 
+                /*
+                |--------------------------------------------------------------------------
+                | Create Payment Voucher
+                |--------------------------------------------------------------------------
+                */
+
                 $voucher =
                     $this->repository->create([
+                        'company_id' =>
+                            $companyId,
 
                         'voucher_no' =>
                             $this
                                 ->documentSequenceService
                                 ->next('PV'),
 
-                        // 'voucher_date' => now(),
-                        'voucher_date' => now()->toDateString(),
-                        
-                        'account_payable_id' => $dto->accountPayableId,
+                        'voucher_date' =>
+                            now()->toDateString(),
 
-                        'cash_bank_account_id' => $dto->cashBankAccountId,
+                        'account_payable_id' =>
+                            $ap->id,
 
-                        'amount' => $dto->amount,
+                        'cash_bank_account_id' =>
+                            $dto->cashBankAccountId,
 
-                        'payment_method' => $dto->paymentMethod,
+                        'amount' =>
+                            $dto->amount,
 
-                        'remarks' => $dto->remarks,
+                        'payment_method' =>
+                            $dto->paymentMethod,
 
-                        'created_by' => $dto->createdBy,
+                        'remarks' =>
+                            $dto->remarks,
+
+                        'created_by' =>
+                            $dto->createdBy,
                     ]);
 
                 /*
-                 * Update AP
-                 */
+                |--------------------------------------------------------------------------
+                | Update Account Payable
+                |--------------------------------------------------------------------------
+                */
 
-                $newPaid = $ap->paid_amount + $dto->amount;
+                $newPaid =
+                    $ap->paid_amount
+                    +
+                    $dto->amount;
 
-                $newBalance = $ap->amount - $newPaid;
+                $newBalance =
+                    $ap->amount
+                    -
+                    $newPaid;
 
                 $ap->update([
-
                     'paid_amount' =>
                         $newPaid,
 
                     'balance_amount' =>
-                        max(0, $newBalance),
+                        max(
+                            0,
+                            $newBalance
+                        ),
 
                     'status' =>
                         $newBalance <= 0
@@ -101,32 +161,69 @@ class PaymentVoucherService
                 ]);
 
                 /*
-                 * Journal
-                 */
+                |--------------------------------------------------------------------------
+                | Journal
+                |--------------------------------------------------------------------------
+                |
+                | Accounting mapping harus menggunakan company milik AP,
+                | bukan company creator.
+                |
+                */
 
-                $this->autoJournalService
+                $this
+                    ->autoJournalService
                     ->paymentVoucher(
-                        amount: $dto->amount,
-                        cashBankAccountId: $dto->cashBankAccountId,
-                        referenceId: $voucher->id,
-                        userId: $dto->createdBy,
-                        companyId: $companyId
-                    );
-                /*
-                 * Audit
-                 */
+                        amount:
+                            $dto->amount,
 
-                $this->auditService->log(
-                    module : 'Payment Voucher',
-                    action : 'CREATE',
-                    referenceType : 'PaymentVoucher',
-                    referenceId : $voucher->id,
-                    oldValues : null,
-                    newValues : [
-                        'voucher_no' =>
-                            $voucher->voucher_no,
-                    ]
-                );
+                        cashBankAccountId:
+                            $dto->cashBankAccountId,
+
+                        referenceId:
+                            $voucher->id,
+
+                        userId:
+                            $dto->createdBy,
+
+                        companyId:
+                            $companyId,
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | Audit
+                |--------------------------------------------------------------------------
+                */
+
+                $this
+                    ->auditService
+                    ->log(
+                        module:
+                            'Payment Voucher',
+
+                        action:
+                            'CREATE',
+
+                        referenceType:
+                            'PaymentVoucher',
+
+                        referenceId:
+                            $voucher->id,
+
+                        oldValues:
+                            null,
+
+                        newValues: [
+                            'voucher_no' =>
+                                $voucher->voucher_no,
+
+                            'company_id' =>
+                                $voucher->company_id,
+
+                            'account_payable_id' =>
+                                $ap->id,
+                        ],
+                    );
 
                 return $voucher;
             }

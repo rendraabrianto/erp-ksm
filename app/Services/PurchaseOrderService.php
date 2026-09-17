@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\DTO\PurchaseOrderDTO;
 use App\Models\PurchaseOrderDetail;
+use App\Models\PurchaseRequest;
+use App\Models\User;
 use App\Repositories\Contracts\PurchaseOrderRepositoryInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -13,71 +15,158 @@ class PurchaseOrderService
         private PurchaseOrderRepositoryInterface $repository,
         private DocumentSequenceService $documentSequenceService,
         private AuditLogService $auditLogService,
+        protected CompanyGuardService $companyGuardService,
     ) {}
 
     public function create(
         PurchaseOrderDTO $dto
-    )
-    {
-        return DB::transaction(function () use ($dto) {
+    ) {
+        return DB::transaction(
+            function () use ($dto) {
 
-            $po = $this->repository->create([
-                'po_no' => $this
-                    ->documentSequenceService
-                    ->next('PO'),
+                /*
+                |--------------------------------------------------------------------------
+                | Resolve Company Ownership
+                |--------------------------------------------------------------------------
+                |
+                | Rule:
+                |
+                | 1. PO dari Purchase Request:
+                |    company_id = purchase_request.company_id
+                |
+                | 2. PO manual tanpa Purchase Request:
+                |    company_id = creator.company_id
+                |
+                | Actor lintas company belum ditolak di fase ini.
+                | Cross-company authorization guard akan dilakukan di G6.
+                |
+                */
 
-                'purchase_request_id'
-                    => $dto->purchaseRequestId,
+                if ($dto->purchaseRequestId !== null) {
+                    $purchaseRequest = PurchaseRequest::query()
+                        ->whereKey($dto->purchaseRequestId)
+                        ->firstOrFail();
 
-                'po_date' => now(),
+                    $companyId = (int) $purchaseRequest->company_id;
+                } else {
+                    $creator = User::query()
+                        ->whereKey($dto->createdBy)
+                        ->firstOrFail();
 
-                'supplier_name'
-                    => $dto->supplierName,
+                    $companyId = (int) $creator->company_id;
+                }
 
-                'remarks'
-                    => $dto->remarks,
+                $this->companyGuardService->assertActorBelongsToCompany(
+                    $dto->createdBy,
+                    $companyId
+                );
 
-                'status' => 'DRAFT',
+                /*
+                |--------------------------------------------------------------------------
+                | Create Purchase Order Header
+                |--------------------------------------------------------------------------
+                */
 
-                'created_by'
-                    => $dto->createdBy,
-            ]);
+                $po =
+                    $this->repository->create([
+                        'company_id' =>
+                            $companyId,
 
-            foreach ($dto->lines as $line) {
+                        'po_no' =>
+                            $this
+                                ->documentSequenceService
+                                ->next('PO'),
 
-                PurchaseOrderDetail::create([
-                    'purchase_order_id'
-                        => $po->id,
+                        'purchase_request_id' =>
+                            $dto->purchaseRequestId,
 
-                    'item_id'
-                        => $line->itemId,
+                        'po_date' =>
+                            now(),
 
-                    'qty'
-                        => $line->qty,
+                        'supplier_name' =>
+                            $dto->supplierName,
 
-                    'unit_price'
-                        => $line->unitPrice,
+                        'remarks' =>
+                            $dto->remarks,
 
-                    'received_qty'
-                        => 0,
+                        'status' =>
+                            'DRAFT',
 
-                    'remarks'
-                        => $line->remarks,
-                ]);
+                        'created_by' =>
+                            $dto->createdBy,
+                    ]);
+
+                /*
+                |--------------------------------------------------------------------------
+                | Create Details
+                |--------------------------------------------------------------------------
+                */
+
+                foreach (
+                    $dto->lines
+                    as $line
+                ) {
+                    PurchaseOrderDetail::create([
+                        'purchase_order_id' =>
+                            $po->id,
+
+                        'item_id' =>
+                            $line->itemId,
+
+                        'qty' =>
+                            $line->qty,
+
+                        'unit_price' =>
+                            $line->unitPrice,
+
+                        'received_qty' =>
+                            0,
+
+                        'remarks' =>
+                            $line->remarks,
+                    ]);
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Audit Log
+                |--------------------------------------------------------------------------
+                */
+
+                $this
+                    ->auditLogService
+                    ->log(
+                        module:
+                            'Purchase Order',
+
+                        action:
+                            'CREATE',
+
+                        referenceType:
+                            'PurchaseOrder',
+
+                        referenceId:
+                            $po->id,
+
+                        oldValues:
+                            null,
+
+                        newValues: [
+                            'po_no' =>
+                                $po->po_no,
+
+                            'company_id' =>
+                                $po->company_id,
+
+                            'purchase_request_id' =>
+                                $po->purchase_request_id,
+                        ]
+                    );
+
+                return $po->load(
+                    'details'
+                );
             }
-
-            $this->auditLogService->log(
-                module: 'Purchase Order',
-                action: 'CREATE',
-                referenceType: 'PurchaseOrder',
-                referenceId: $po->id,
-                oldValues: null,
-                newValues: [
-                    'po_no' => $po->po_no,
-                ]
-            );
-
-            return $po->load('details');
-        });
+        );
     }
 }

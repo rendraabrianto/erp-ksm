@@ -3,95 +3,147 @@
 namespace App\Services;
 
 use App\DTO\SalesOrderDTO;
-use Illuminate\Support\Facades\DB;
+use App\Models\User;
 use App\Repositories\Contracts\SalesOrderRepositoryInterface;
+use Illuminate\Support\Facades\DB;
 
 class SalesOrderService
 {
     public function __construct(
-
         private SalesOrderRepositoryInterface $repository,
-
         private DocumentSequenceService $documentSequenceService,
-
         private AuditLogService $auditService,
     ) {}
 
     public function create(
         SalesOrderDTO $dto
-    )
-    {
+    ) {
         return DB::transaction(
             function () use ($dto) {
 
+                /*
+                |--------------------------------------------------------------------------
+                | Resolve Company Ownership
+                |--------------------------------------------------------------------------
+                |
+                | Sales Order adalah root document pada sales cycle saat ini.
+                | Karena belum ada parent business document, ownership diambil
+                | dari company milik creator.
+                |
+                | G6 nanti akan menangani cross-company actor authorization.
+                |
+                */
+
+                $user =
+                    User::query()
+                        ->whereKey(
+                            $dto->createdBy
+                        )
+                        ->firstOrFail();
+
+                $companyId =
+                    (int) $user->company_id;
+
+                /*
+                |--------------------------------------------------------------------------
+                | Create Sales Order
+                |--------------------------------------------------------------------------
+                */
+
                 $so =
-                    $this->repository->create([
+                    $this
+                        ->repository
+                        ->create([
+                            'company_id' =>
+                                $companyId,
 
-                        'so_no' =>
-                            $this
-                                ->documentSequenceService
-                                ->next('SO'),
+                            'so_no' =>
+                                $this
+                                    ->documentSequenceService
+                                    ->next('SO'),
 
-                        'customer_id' =>
-                            $dto->customerId,
+                            'customer_id' =>
+                                $dto->customerId,
 
-                        'order_date' =>
-                            now()
-                                ->toDateString(),
+                            'order_date' =>
+                                now()->toDateString(),
 
-                        'delivery_date' =>
-                            $dto->deliveryDate,
+                            'delivery_date' =>
+                                $dto->deliveryDate,
 
-                        'status' =>
-                            'APPROVED',
+                            'status' =>
+                                'APPROVED',
 
-                        'remarks' =>
-                            $dto->remarks,
+                            'remarks' =>
+                                $dto->remarks,
 
-                        'created_by' =>
-                            $dto->createdBy,
-                    ]);
+                            'created_by' =>
+                                $dto->createdBy,
+                        ]);
+
+                /*
+                |--------------------------------------------------------------------------
+                | Details
+                |--------------------------------------------------------------------------
+                */
 
                 foreach (
                     $dto->lines
                     as $line
                 ) {
 
-                    $so->details()->create([
+                    $so
+                        ->details()
+                        ->create([
+                            'item_id' =>
+                                $line->itemId,
 
-                        'item_id' =>
-                            $line->itemId,
+                            'qty' =>
+                                $line->qty,
 
-                        'qty' =>
-                            $line->qty,
+                            'unit_price' =>
+                                $line->unitPrice,
 
-                        'unit_price' =>
-                            $line->unitPrice,
+                            'discount' =>
+                                $line->discount,
 
-                        'discount' =>
-                            $line->discount,
-
-                        'remarks' =>
-                            $line->remarks,
-                    ]);
+                            'remarks' =>
+                                $line->remarks,
+                        ]);
                 }
 
-                $this->auditService->log(
+                /*
+                |--------------------------------------------------------------------------
+                | Audit
+                |--------------------------------------------------------------------------
+                */
 
-                    module : 'Sales Order',
+                $this
+                    ->auditService
+                    ->log(
+                        module:
+                            'Sales Order',
 
-                    action : 'CREATE',
+                        action:
+                            'CREATE',
 
-                    referenceType : 'SalesOrder',
+                        referenceType:
+                            'SalesOrder',
 
-                    referenceId : $so->id,
+                        referenceId:
+                            $so->id,
 
-                    oldValues : null,
+                        oldValues:
+                            null,
 
-                    newValues : [
-                        'so_no' => $so->so_no,
-                    ]
-                );
+                        newValues: [
+                            'so_no' =>
+                                $so->so_no,
+
+                            'company_id' =>
+                                $companyId,
+                        ]
+                    );
 
                 return $so->load(
                     'details'

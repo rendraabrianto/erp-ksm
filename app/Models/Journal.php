@@ -17,9 +17,16 @@ class Journal extends Model
         'source_journal_id',
         'reconciliation_key',
         'description',
-        // 'status',
         'created_by',
+        'company_id',
     ];
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(
+            Company::class
+        );
+    }
 
     public function details(): HasMany
     {

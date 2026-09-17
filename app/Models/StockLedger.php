@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class StockLedger extends Model
 {
     protected $fillable = [
+        'company_id',
         'warehouse_id',
         'item_id',
         'transaction_date',
@@ -29,6 +30,13 @@ class StockLedger extends Model
         'unit_cost' => 'decimal:2',
         'total_cost' => 'decimal:2',
     ];
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(
+            Company::class
+        );
+    }
 
     public function warehouse(): BelongsTo
     {

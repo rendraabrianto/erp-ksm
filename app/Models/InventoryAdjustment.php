@@ -18,7 +18,15 @@ class InventoryAdjustment extends Model
         'created_by',
         'posted_by',
         'posted_at',
+        'company_id',
     ];
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(
+            Company::class
+        );
+    }
 
     protected $casts = [
         'adjustment_date' => 'date',

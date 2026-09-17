@@ -225,6 +225,9 @@ class PurchaseInvoiceClosedLoopTest extends TestCase
         $purchaseOrderId =
             DB::table('purchase_orders')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'po_no' =>
                         'PO-PI-TEST-001',
 
@@ -262,6 +265,8 @@ class PurchaseInvoiceClosedLoopTest extends TestCase
         $goodsReceiptId =
             DB::table('goods_receipts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
                     'gr_no' =>
                         'GR-PI-TEST-001',
 
@@ -465,6 +470,8 @@ class PurchaseInvoiceClosedLoopTest extends TestCase
         $purchaseOrderId =
             DB::table('purchase_orders')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
                     'po_no' =>
                         'PO-PI-ROLLBACK-001',
 
@@ -502,6 +509,8 @@ class PurchaseInvoiceClosedLoopTest extends TestCase
         $goodsReceiptId =
             DB::table('goods_receipts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
                     'gr_no' =>
                         'GR-PI-ROLLBACK-001',
 
@@ -665,6 +674,208 @@ class PurchaseInvoiceClosedLoopTest extends TestCase
             $beforeJournals,
             DB::table('journals')
                 ->count()
+        );
+    }
+
+    public function test_purchase_invoice_and_account_payable_inherit_company_from_goods_receipt(): void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Purchase Order Company A
+        |--------------------------------------------------------------------------
+        */
+
+        $purchaseOrderId =
+            DB::table('purchase_orders')
+                ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
+                    'po_no' =>
+                        'PO-PI-COMPANY-001',
+
+                    'purchase_request_id' =>
+                        null,
+
+                    'po_date' =>
+                        '2026-08-08',
+
+                    'supplier_name' =>
+                        'Supplier Company Test',
+
+                    'remarks' =>
+                        'PI company ownership test',
+
+                    'status' =>
+                        'COMPLETED',
+
+                    'created_by' =>
+                        $this->data['user_id'],
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Goods Receipt Company A
+        |--------------------------------------------------------------------------
+        */
+
+        $goodsReceiptId =
+            DB::table('goods_receipts')
+                ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
+                    'gr_no' =>
+                        'GR-PI-COMPANY-001',
+
+                    'purchase_order_id' =>
+                        $purchaseOrderId,
+
+                    'receipt_date' =>
+                        '2026-08-08',
+
+                    'status' =>
+                        'POSTED',
+
+                    'remarks' =>
+                        'PI company ownership source',
+
+                    'created_by' =>
+                        $this->data['user_id'],
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+        /*
+        |--------------------------------------------------------------------------
+        | Same-Company Actor Sanity Check
+        |--------------------------------------------------------------------------
+        */
+
+        $actorCompanyId =
+            (int) DB::table('users')
+                ->where(
+                    'id',
+                    $this->data['user_id']
+                )
+                ->value('company_id');
+
+        $this->assertSame(
+            (int) $this->data['company_id'],
+            $actorCompanyId
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Create PI
+        |--------------------------------------------------------------------------
+        */
+
+        $invoice =
+            app(PurchaseInvoiceService::class)
+                ->create(
+                    new PurchaseInvoiceDTO(
+                        goodsReceiptId:
+                            $goodsReceiptId,
+
+                        supplierName:
+                            'Supplier Company Test',
+
+                        supplierInvoiceNo:
+                            'SUP-COMPANY-001',
+
+                        subtotal:
+                            80000,
+
+                        taxAmount:
+                            0,
+
+                        grandTotal:
+                            80000,
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        lines: [
+                            new PurchaseInvoiceLineDTO(
+                                itemId:
+                                    $this->data['item_id'],
+
+                                qty:
+                                    10,
+
+                                unitPrice:
+                                    8000,
+
+                                amount:
+                                    80000,
+
+                                remarks:
+                                    'Company ownership test',
+                            ),
+                        ],
+                    )
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Purchase Invoice Must Belong To GR Company A
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            (int) $this->data['company_id'],
+            (int) $invoice->company_id
+        );
+
+        $this->assertDatabaseHas(
+            'purchase_invoices',
+            [
+                'id' =>
+                    $invoice->id,
+
+                'goods_receipt_id' =>
+                    $goodsReceiptId,
+
+                'company_id' =>
+                    $this->data['company_id'],
+            ]
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Account Payable Must Inherit PI Company
+        |--------------------------------------------------------------------------
+        */
+
+        $payable =
+            DB::table('account_payables')
+                ->where(
+                    'reference_type',
+                    'PURCHASE_INVOICE'
+                )
+                ->where(
+                    'reference_id',
+                    $invoice->id
+                )
+                ->first();
+
+        $this->assertNotNull(
+            $payable
+        );
+
+        $this->assertSame(
+            (int) $this->data['company_id'],
+            (int) $payable->company_id
         );
     }
 }

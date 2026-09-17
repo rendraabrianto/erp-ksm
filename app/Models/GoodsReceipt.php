@@ -15,7 +15,15 @@ class GoodsReceipt extends Model
         'status',
         'remarks',
         'created_by',
+        'company_id',
     ];
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(
+            Company::class
+        );
+    }
 
     public function details(): HasMany
     {

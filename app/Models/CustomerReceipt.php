@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CustomerReceipt extends Model
 {
@@ -18,7 +19,15 @@ class CustomerReceipt extends Model
         'amount',
         'remarks',
         'created_by',
+        'company_id',
     ];
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(
+            Company::class
+        );
+    }
 
     protected $casts = [
         'receipt_date' => 'date',

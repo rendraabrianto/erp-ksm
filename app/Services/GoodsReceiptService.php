@@ -7,9 +7,9 @@ use App\DTO\InventoryTransactionDTO;
 use App\Models\Item;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderDetail;
+use App\Models\Warehouse;
 use App\Repositories\Contracts\GoodsReceiptRepositoryInterface;
 use Illuminate\Support\Facades\DB;
-use App\Models\Warehouse;
 
 class GoodsReceiptService
 {
@@ -19,6 +19,7 @@ class GoodsReceiptService
         private InventoryTransactionService $inventoryTransactionService,
         private AutoJournalService $autoJournalService,
         private AuditLogService $auditLogService,
+        private CompanyGuardService $companyGuardService,
     ) {
     }
 
@@ -36,6 +37,9 @@ class GoodsReceiptService
                 |--------------------------------------------------------------------------
                 | Lock Purchase Order
                 |--------------------------------------------------------------------------
+                |
+                | Purchase Order adalah ownership authority Goods Receipt.
+                |
                 */
 
                 $purchaseOrder =
@@ -46,6 +50,31 @@ class GoodsReceiptService
                         ->lockForUpdate()
                         ->firstOrFail();
 
+                $companyId =
+                    (int) $purchaseOrder->company_id;
+
+                /*
+                |--------------------------------------------------------------------------
+                | Actor Company Guard
+                |--------------------------------------------------------------------------
+                |
+                | Purchase Order is the authoritative company ownership source.
+                | createdBy is only the transaction actor.
+                |
+                */
+
+                $this->companyGuardService
+                    ->assertActorBelongsToCompany(
+                        $dto->createdBy,
+                        $companyId
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | Resolve Warehouse
+                |--------------------------------------------------------------------------
+                */
+
                 $warehouse =
                     Warehouse::query()
                         ->whereKey(
@@ -53,8 +82,28 @@ class GoodsReceiptService
                         )
                         ->firstOrFail();
 
-                $companyId =
-                    (int) $warehouse->company_id;
+                /*
+                |--------------------------------------------------------------------------
+                | Company Consistency Guard
+                |--------------------------------------------------------------------------
+                |
+                | Warehouse hanya merupakan destination inventory.
+                |
+                | Ownership GR tetap berasal dari Purchase Order.
+                | Warehouse dari company lain tidak boleh menerima barang
+                | untuk Purchase Order milik company tersebut.
+                |
+                */
+
+                if (
+                    (int) $warehouse->company_id
+                    !==
+                    $companyId
+                ) {
+                    throw new \RuntimeException(
+                        'Goods receipt warehouse does not belong to purchase order company.'
+                    );
+                }
 
                 /*
                 |--------------------------------------------------------------------------
@@ -66,13 +115,16 @@ class GoodsReceiptService
                     $this
                         ->repository
                         ->create([
+                            'company_id' =>
+                                $companyId,
+
                             'gr_no' =>
                                 $this
                                     ->documentSequenceService
                                     ->next('GR'),
 
                             'purchase_order_id' =>
-                                $dto->purchaseOrderId,
+                                $purchaseOrder->id,
 
                             'receipt_date' =>
                                 $receiptDate,
@@ -91,12 +143,6 @@ class GoodsReceiptService
                 |--------------------------------------------------------------------------
                 | Collect Journal Lines
                 |--------------------------------------------------------------------------
-                |
-                | Inventory tetap dipost per item karena setiap item menghasilkan
-                | stock ledger masing-masing.
-                |
-                | Journal TIDAK dipost di dalam loop.
-                |
                 */
 
                 $journalInventoryLines =
@@ -126,7 +172,7 @@ class GoodsReceiptService
                             )
                             ->where(
                                 'purchase_order_id',
-                                $dto->purchaseOrderId
+                                $purchaseOrder->id
                             )
                             ->lockForUpdate()
                             ->firstOrFail();
@@ -154,12 +200,10 @@ class GoodsReceiptService
                     */
 
                     $orderedQty =
-                        (float)
-                        $poDetail->qty;
+                        (float) $poDetail->qty;
 
                     $receivedQty =
-                        (float)
-                        $poDetail->received_qty;
+                        (float) $poDetail->received_qty;
 
                     $remainingQty =
                         $orderedQty
@@ -287,10 +331,6 @@ class GoodsReceiptService
                     |--------------------------------------------------------------------------
                     | Last Purchase Price
                     |--------------------------------------------------------------------------
-                    |
-                    | average_cost tidak diubah di items karena warehouse costing
-                    | bersumber dari inventory ledger.
-                    |
                     */
 
                     $item->update([
@@ -333,45 +373,38 @@ class GoodsReceiptService
                 | One Journal Per Goods Receipt
                 |--------------------------------------------------------------------------
                 |
-                | Semua detail selesai lebih dahulu.
-                |
-                | Jika journal gagal, outer DB transaction akan rollback:
-                |
-                | - GR header
-                | - GR detail
-                | - PO received_qty
-                | - stock ledger
-                | - last purchase price
+                | Company journal mengikuti ownership Purchase Order / GR,
+                | bukan warehouse dan bukan created_by.
                 |
                 */
 
                 if (
-                        count(
-                            $journalInventoryLines
-                        ) > 0
-                    ) {
-                        $this
-                            ->autoJournalService
-                            ->goodsReceipt(
-                                inventoryAccount:
-                                    $journalInventoryLines,
+                    count(
+                        $journalInventoryLines
+                    ) > 0
+                ) {
+                    $this
+                        ->autoJournalService
+                        ->goodsReceipt(
+                            inventoryAccount:
+                                $journalInventoryLines,
 
-                                amount:
-                                    null,
+                            amount:
+                                null,
 
-                                referenceId:
-                                    $gr->id,
+                            referenceId:
+                                $gr->id,
 
-                                userId:
-                                    $dto->createdBy,
+                            userId:
+                                $dto->createdBy,
 
-                                companyId:
-                                    $companyId,
+                            companyId:
+                                $companyId,
 
-                                journalDate:
-                                    $receiptDate,
-                            );
-                    }
+                            journalDate:
+                                $receiptDate,
+                        );
+                }
 
                 /*
                 |--------------------------------------------------------------------------
@@ -461,6 +494,9 @@ class GoodsReceiptService
                             'gr_no' =>
                                 $gr->gr_no,
 
+                            'company_id' =>
+                                $gr->company_id,
+
                             'receipt_date' =>
                                 $receiptDate,
 
@@ -468,7 +504,7 @@ class GoodsReceiptService
                                 $dto->warehouseId,
 
                             'purchase_order_id' =>
-                                $dto->purchaseOrderId,
+                                $purchaseOrder->id,
 
                             'purchase_order_status' =>
                                 $purchaseOrder->status,

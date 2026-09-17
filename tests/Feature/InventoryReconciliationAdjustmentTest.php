@@ -652,4 +652,46 @@ class InventoryReconciliationAdjustmentTest extends TestCase
                 ->count()
         );
     }
+
+    public function test_apply_journals_inherit_company_from_reconciliation_warehouse():
+        void
+    {
+        $result =
+            $this->service()->apply(
+                $this->dto,
+                $this->data['user_id']
+            );
+
+        $journalIds =
+            collect(
+                $result['journals']
+            )->pluck(
+                'journal_id'
+            );
+
+        $this->assertCount(
+            8,
+            $journalIds
+        );
+
+        $journals =
+            Journal::query()
+                ->whereIn(
+                    'id',
+                    $journalIds
+                )
+                ->get();
+
+        $this->assertCount(
+            8,
+            $journals
+        );
+
+        foreach ($journals as $journal) {
+            $this->assertSame(
+                (int) $this->data['company_id'],
+                (int) $journal->company_id
+            );
+        }
+    }
 }

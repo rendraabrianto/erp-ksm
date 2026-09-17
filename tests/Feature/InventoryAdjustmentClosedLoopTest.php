@@ -18,6 +18,9 @@ use App\DTO\InventoryValuationFilterDTO;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Support\InventoryReconciliationTestData;
 use Tests\TestCase;
+use App\Models\Branch;
+use App\Models\Company;
+use App\Models\User;
 
 class InventoryAdjustmentClosedLoopTest extends TestCase
 {
@@ -421,6 +424,9 @@ class InventoryAdjustmentClosedLoopTest extends TestCase
                 'id' =>
                     $adjustment->id,
 
+                'company_id' =>
+                    $this->data['company_id'],
+
                 'status' =>
                     'POSTED',
             ]
@@ -429,6 +435,9 @@ class InventoryAdjustmentClosedLoopTest extends TestCase
         $this->assertDatabaseHas(
             'stock_ledgers',
             [
+                'company_id' =>
+                    $this->data['company_id'],
+
                 'reference_type' =>
                     'INVENTORY_ADJUSTMENT',
 
@@ -440,6 +449,9 @@ class InventoryAdjustmentClosedLoopTest extends TestCase
         $this->assertDatabaseHas(
             'journals',
             [
+                'company_id' =>
+                    $this->data['company_id'],
+
                 'reference_type' =>
                     'INVENTORY_ADJUSTMENT',
 
@@ -566,6 +578,114 @@ class InventoryAdjustmentClosedLoopTest extends TestCase
                     $adjustment->id
                 )
                 ->count()
+        );
+    }
+
+    public function test_inventory_adjustment_inherits_company_from_warehouse():
+        void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Warehouse Company Is Authoritative
+        |--------------------------------------------------------------------------
+        |
+        | Inventory Adjustment company ownership must come from the warehouse.
+        |
+        | After G6, the creator must also belong to the same company.
+        | Cross-company actor rejection is tested separately in
+        | InventoryCompanyGuardTest.
+        |
+        */
+
+        $companyAId =
+            (int) $this->data['company_id'];
+
+        $warehouse =
+            \App\Models\Warehouse::findOrFail(
+                $this->data['warehouse_id']
+            );
+
+        $creator =
+            User::findOrFail(
+                $this->data['user_id']
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Sanity Check
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $companyAId,
+            (int) $warehouse->company_id
+        );
+
+        $this->assertSame(
+            $companyAId,
+            (int) $creator->company_id
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Create Adjustment
+        |--------------------------------------------------------------------------
+        */
+
+        $adjustment =
+            app(
+                InventoryAdjustmentService::class
+            )->create(
+                new InventoryAdjustmentCreateDTO(
+                    warehouseId:
+                        $warehouse->id,
+
+                    adjustmentDate:
+                        '2026-08-23',
+
+                    reason:
+                        'STOCK_OPNAME',
+
+                    remarks:
+                        'Adjustment company ownership test',
+
+                    createdBy:
+                        $creator->id,
+
+                    details: [
+                        [
+                            'item_id' =>
+                                $this->data['item_id'],
+
+                            'physical_qty' =>
+                                170.0,
+
+                            'remarks' =>
+                                'Ownership test',
+                        ],
+                    ],
+                )
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert Ownership
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $companyAId,
+            (int) $adjustment->company_id
+        );
+
+        $this->assertSame(
+            (int) $warehouse->company_id,
+            (int) $adjustment->company_id
+        );
+
+        $this->assertSame(
+            $creator->id,
+            (int) $adjustment->created_by
         );
     }
 }

@@ -14,6 +14,11 @@ use App\Services\InventoryTransferService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Support\InventoryReconciliationTestData;
 use Tests\TestCase;
+use App\Models\Branch;
+use App\Models\Company;
+use App\Models\InventoryTransfer;
+use App\Models\User;
+use RuntimeException;
 
 class InventoryTransferClosedLoopTest extends TestCase
 {
@@ -882,6 +887,517 @@ class InventoryTransferClosedLoopTest extends TestCase
         $this->assertEquals(
             $totalBefore,
             $totalAfter
+        );
+    }
+
+    public function test_inventory_transfer_inherits_company_from_source_warehouse():
+        void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Source Warehouse Company Is Authoritative
+        |--------------------------------------------------------------------------
+        |
+        | Inventory Transfer company ownership must come from source warehouse.
+        |
+        | Source and destination warehouses must belong to the same company,
+        | and after G6 the creator must belong to that company as well.
+        |
+        | Cross-company actor rejection is tested separately in
+        | InventoryCompanyGuardTest.
+        |
+        */
+
+        $companyAId =
+            (int) $this->sourceWarehouse->company_id;
+
+        $creator =
+            User::findOrFail(
+                $this->data['user_id']
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Sanity Check
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $companyAId,
+            (int) $this
+                ->destinationWarehouse
+                ->company_id
+        );
+
+        $this->assertSame(
+            $companyAId,
+            (int) $creator->company_id
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Create Same-Company Transfer
+        |--------------------------------------------------------------------------
+        */
+
+        $transfer =
+            $this
+                ->transferService
+                ->create(
+                    new InventoryTransferCreateDTO(
+                        sourceWarehouseId:
+                            $this->sourceWarehouse->id,
+
+                        destinationWarehouseId:
+                            $this->destinationWarehouse->id,
+
+                        transferDate:
+                            '2026-08-27',
+
+                        remarks:
+                            'Transfer company ownership test',
+
+                        createdBy:
+                            $creator->id,
+
+                        details: [
+                            [
+                                'item_id' =>
+                                    $this->data['item_id'],
+
+                                'qty' =>
+                                    20.0,
+
+                                'remarks' =>
+                                    'Ownership test',
+                            ],
+                        ],
+                    )
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert Ownership
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $companyAId,
+            (int) $transfer->company_id
+        );
+
+        $this->assertSame(
+            (int) $this
+                ->sourceWarehouse
+                ->company_id,
+            (int) $transfer->company_id
+        );
+
+        $this->assertSame(
+            $creator->id,
+            (int) $transfer->created_by
+        );
+    }
+
+    public function test_inventory_transfer_rejects_destination_from_different_company():
+        void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyB =
+            Company::create([
+                'code' =>
+                    'TRF-X-' . substr(
+                        uniqid(),
+                        -5
+                    ),
+
+                'name' =>
+                    'Cross Company Transfer B',
+
+                'is_active' =>
+                    true,
+            ]);
+
+        $branchB =
+            Branch::create([
+                'company_id' =>
+                    $companyB->id,
+
+                'code' =>
+                    'TRF-XB-' . substr(
+                        uniqid(),
+                        -5
+                    ),
+
+                'name' =>
+                    'Cross Company Transfer Branch B',
+
+                'is_active' =>
+                    true,
+            ]);
+
+        $warehouseB =
+            Warehouse::create([
+                'company_id' =>
+                    $companyB->id,
+
+                'branch_id' =>
+                    $branchB->id,
+
+                'code' =>
+                    'WH-TRF-B-' . substr(
+                        uniqid(),
+                        -5
+                    ),
+
+                'name' =>
+                    'Cross Company Destination Warehouse',
+
+                'is_active' =>
+                    true,
+            ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Capture State Before
+        |--------------------------------------------------------------------------
+        */
+
+        $transferCountBefore =
+            InventoryTransfer::query()
+                ->count();
+
+        $detailCountBefore =
+            InventoryTransferDetail::query()
+                ->count();
+
+        $ledgerCountBefore =
+            StockLedger::query()
+                ->count();
+
+        $sourceBefore =
+            $this->state(
+                $this->sourceWarehouse->id
+            );
+
+        $destinationBefore =
+            $this->state(
+                $warehouseB->id
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Attempt Cross-Company Transfer
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+
+            $this->transferService
+                ->create(
+                    new InventoryTransferCreateDTO(
+                        sourceWarehouseId:
+                            $this->sourceWarehouse->id,
+
+                        destinationWarehouseId:
+                            $warehouseB->id,
+
+                        transferDate:
+                            '2026-08-27',
+
+                        remarks:
+                            'Cross company transfer must fail',
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        details: [
+                            [
+                                'item_id' =>
+                                    $this->data['item_id'],
+
+                                'qty' =>
+                                    20.0,
+
+                                'remarks' =>
+                                    'Must never be created',
+                            ],
+                        ],
+                    )
+                );
+
+            $this->fail(
+                'Expected cross-company inventory transfer exception was not thrown.'
+            );
+
+        } catch (RuntimeException $exception) {
+
+            $this->assertSame(
+                'Inventory transfer warehouses must belong to the same company.',
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | No Mutation
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $transferCountBefore,
+            InventoryTransfer::query()
+                ->count()
+        );
+
+        $this->assertSame(
+            $detailCountBefore,
+            InventoryTransferDetail::query()
+                ->count()
+        );
+
+        $this->assertSame(
+            $ledgerCountBefore,
+            StockLedger::query()
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Stock State Must Remain Unchanged
+        |--------------------------------------------------------------------------
+        */
+
+        $sourceAfter =
+            $this->state(
+                $this->sourceWarehouse->id
+            );
+
+        $destinationAfter =
+            $this->state(
+                $warehouseB->id
+            );
+
+        $this->assertEquals(
+            (float) $sourceBefore['qty'],
+            (float) $sourceAfter['qty']
+        );
+
+        $this->assertEquals(
+            (float) $sourceBefore['value'],
+            (float) $sourceAfter['value']
+        );
+
+        $this->assertEquals(
+            (float) $destinationBefore['qty'],
+            (float) $destinationAfter['qty']
+        );
+
+        $this->assertEquals(
+            (float) $destinationBefore['value'],
+            (float) $destinationAfter['value']
+        );
+    }
+
+    public function test_post_rejects_cross_company_transfer_even_if_draft_was_tampered():
+        void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Create Valid Same-Company Draft First
+        |--------------------------------------------------------------------------
+        */
+
+        $transfer =
+            $this->createTransfer(
+                20.0
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Create Company B + Warehouse B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyB =
+            \App\Models\Company::create([
+                'code' =>
+                    'TRF-POST-B-' . substr(
+                        uniqid(),
+                        -5
+                    ),
+
+                'name' =>
+                    'Transfer Post Company B',
+
+                'is_active' =>
+                    true,
+            ]);
+
+        $branchB =
+            \App\Models\Branch::create([
+                'company_id' =>
+                    $companyB->id,
+
+                'code' =>
+                    'TRF-POST-BR-' . substr(
+                        uniqid(),
+                        -5
+                    ),
+
+                'name' =>
+                    'Transfer Post Branch B',
+
+                'is_active' =>
+                    true,
+            ]);
+
+        $warehouseB =
+            Warehouse::create([
+                'company_id' =>
+                    $companyB->id,
+
+                'branch_id' =>
+                    $branchB->id,
+
+                'code' =>
+                    'WH-TRF-POST-B-' . substr(
+                        uniqid(),
+                        -5
+                    ),
+
+                'name' =>
+                    'Tampered Cross Company Destination',
+
+                'is_active' =>
+                    true,
+            ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Simulate Legacy / Tampered Draft
+        |--------------------------------------------------------------------------
+        */
+
+        $transfer->update([
+            'destination_warehouse_id' =>
+                $warehouseB->id,
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Capture State Before POST
+        |--------------------------------------------------------------------------
+        */
+
+        $ledgerCountBefore =
+            StockLedger::query()
+                ->count();
+
+        $sourceBefore =
+            $this->state(
+                $this->sourceWarehouse->id
+            );
+
+        $destinationBefore =
+            $this->state(
+                $warehouseB->id
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | POST Must Reject Cross-Company Transfer
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+
+            $this->transferService
+                ->post(
+                    $transfer->id,
+                    $this->data['user_id']
+                );
+
+            $this->fail(
+                'Expected cross-company inventory transfer posting exception was not thrown.'
+            );
+
+        } catch (RuntimeException $exception) {
+
+            $this->assertSame(
+                'Inventory transfer warehouses must belong to the same company.',
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | No Ledger Mutation
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $ledgerCountBefore,
+            StockLedger::query()
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Stock Must Remain Unchanged
+        |--------------------------------------------------------------------------
+        */
+
+        $sourceAfter =
+            $this->state(
+                $this->sourceWarehouse->id
+            );
+
+        $destinationAfter =
+            $this->state(
+                $warehouseB->id
+            );
+
+        $this->assertEquals(
+            (float) $sourceBefore['qty'],
+            (float) $sourceAfter['qty']
+        );
+
+        $this->assertEquals(
+            (float) $sourceBefore['value'],
+            (float) $sourceAfter['value']
+        );
+
+        $this->assertEquals(
+            (float) $destinationBefore['qty'],
+            (float) $destinationAfter['qty']
+        );
+
+        $this->assertEquals(
+            (float) $destinationBefore['value'],
+            (float) $destinationAfter['value']
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Transfer Must Stay DRAFT
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertDatabaseHas(
+            'inventory_transfers',
+            [
+                'id' =>
+                    $transfer->id,
+
+                'status' =>
+                    'DRAFT',
+            ]
         );
     }
 }

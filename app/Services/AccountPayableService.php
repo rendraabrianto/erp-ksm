@@ -16,15 +16,35 @@ class AccountPayableService
     )
     {
         return $this->repository->create([
-            'reference_type' => $dto->referenceType,
-            'reference_id'   => $dto->referenceId,
-            'supplier_name'  => $dto->supplierName,
-            'invoice_date'   => $dto->invoiceDate,
-            'due_date'       => $dto->dueDate,
-            'amount'         => $dto->amount,
-            'paid_amount'    => 0,
-            'balance_amount' => $dto->amount,
-            'status'         => 'OPEN',
+            'company_id' =>
+                $dto->companyId,
+
+            'reference_type' =>
+                $dto->referenceType,
+
+            'reference_id' =>
+                $dto->referenceId,
+
+            'supplier_name' =>
+                $dto->supplierName,
+
+            'invoice_date' =>
+                $dto->invoiceDate,
+
+            'due_date' =>
+                $dto->dueDate,
+
+            'amount' =>
+                $dto->amount,
+
+            'paid_amount' =>
+                0,
+
+            'balance_amount' =>
+                $dto->amount,
+
+            'status' =>
+                'OPEN',
         ]);
     }
 
@@ -33,26 +53,30 @@ class AccountPayableService
         float $amount
     ): void {
 
-        $ap = $this->repository->find(
-            $accountPayableId
-        );
+        $ap =
+            $this->repository->find(
+                $accountPayableId
+            );
 
         $paidAmount =
-            $ap->paid_amount + $amount;
+            $ap->paid_amount
+            +
+            $amount;
 
         $balanceAmount =
-            $ap->amount - $paidAmount;
+            $ap->amount
+            -
+            $paidAmount;
 
         $ap->update([
+            'paid_amount' =>
+                $paidAmount,
 
-            'paid_amount'
-                => $paidAmount,
+            'balance_amount' =>
+                $balanceAmount,
 
-            'balance_amount'
-                => $balanceAmount,
-
-            'status'
-                => $balanceAmount <= 0
+            'status' =>
+                $balanceAmount <= 0
                     ? 'PAID'
                     : 'PARTIAL',
         ]);

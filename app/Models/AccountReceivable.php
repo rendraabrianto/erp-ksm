@@ -4,13 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class AccountReceivable extends Model
 {
     use SoftDeletes;
 
     protected $fillable = [
-
         'customer_id',
         'sales_invoice_id',
         'invoice_date',
@@ -20,7 +20,15 @@ class AccountReceivable extends Model
         'balance_amount',
         'status',
         'remarks',
+        'company_id',
     ];
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(
+            Company::class
+        );
+    }
 
     protected $casts = [
 

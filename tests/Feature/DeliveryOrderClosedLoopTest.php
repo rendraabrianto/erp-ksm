@@ -127,6 +127,9 @@ class DeliveryOrderClosedLoopTest extends TestCase
                 'id' =>
                     $do->id,
 
+                'company_id' =>
+                    $this->data['company_id'],
+
                 'sales_order_id' =>
                     $so->id,
 
@@ -209,6 +212,11 @@ class DeliveryOrderClosedLoopTest extends TestCase
 
         $this->assertNotNull(
             $ledger
+        );
+
+        $this->assertSame(
+            $this->data['company_id'],
+            (int) $ledger->company_id
         );
 
         $this->assertSame(
@@ -331,6 +339,11 @@ class DeliveryOrderClosedLoopTest extends TestCase
 
         $this->assertNotNull(
             $journal
+        );
+
+        $this->assertSame(
+            $this->data['company_id'],
+            (int) $journal->company_id
         );
 
         $this->assertSame(
@@ -724,6 +737,9 @@ class DeliveryOrderClosedLoopTest extends TestCase
 
             $so =
                 SalesOrder::create([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'so_no' =>
                         'SO-DUP-'
                         .
@@ -1715,6 +1731,9 @@ class DeliveryOrderClosedLoopTest extends TestCase
 
             $so =
                 SalesOrder::create([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'so_no' =>
                         'SO-TEST-'
                         .

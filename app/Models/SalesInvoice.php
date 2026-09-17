@@ -4,13 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SalesInvoice extends Model
 {
     use SoftDeletes;
 
     protected $fillable = [
-
         'invoice_no',
         'customer_id',
         'delivery_order_id',
@@ -23,7 +23,15 @@ class SalesInvoice extends Model
         'status',
         'remarks',
         'created_by',
+        'company_id',
     ];
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(
+            Company::class
+        );
+    }
 
     protected $casts = [
 

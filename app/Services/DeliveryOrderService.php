@@ -9,6 +9,7 @@ use App\Models\SalesOrder;
 use App\Models\SalesOrderDetail;
 use App\Repositories\Contracts\DeliveryOrderRepositoryInterface;
 use Illuminate\Support\Facades\DB;
+use App\Models\Warehouse;
 
 class DeliveryOrderService
 {
@@ -18,6 +19,7 @@ class DeliveryOrderService
         private InventoryTransactionService $inventoryService,
         private AutoJournalService $autoJournalService,
         private AuditLogService $auditService,
+        protected CompanyGuardService $companyGuardService,
     ) {
     }
 
@@ -47,6 +49,46 @@ class DeliveryOrderService
 
                 /*
                 |--------------------------------------------------------------------------
+                | Company Ownership
+                |--------------------------------------------------------------------------
+                |
+                | Delivery Order wajib mewarisi company dari Sales Order.
+                |
+                */
+
+                $companyId =
+                    (int) $salesOrder->company_id;
+
+                $this->companyGuardService->assertActorBelongsToCompany(
+                        $dto->createdBy,
+                        $companyId
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | Validate Warehouse Company
+                |--------------------------------------------------------------------------
+                */
+
+                $warehouse =
+                    Warehouse::query()
+                        ->whereKey(
+                            $dto->warehouseId
+                        )
+                        ->firstOrFail();
+
+                if (
+                    (int) $warehouse->company_id
+                    !==
+                    $companyId
+                ) {
+                    throw new \RuntimeException(
+                        'Delivery order warehouse does not belong to sales order company.'
+                    );
+                }
+
+                /*
+                |--------------------------------------------------------------------------
                 | Create Delivery Order Header
                 |--------------------------------------------------------------------------
                 */
@@ -55,6 +97,8 @@ class DeliveryOrderService
                     $this
                         ->repository
                         ->create([
+                            'company_id' =>
+                                $companyId,
                             'do_no' =>
                                 $this
                                     ->documentSequenceService
@@ -329,23 +373,13 @@ class DeliveryOrderService
                     $this
                         ->autoJournalService
                         ->deliveryOrder(
-                            cogsAccount:
-                                $journalTransactionLines,
-
-                            inventoryAccount:
-                                null,
-
-                            amount:
-                                null,
-
-                            referenceId:
-                                $do->id,
-
-                            userId:
-                                $dto->createdBy,
-
-                            journalDate:
-                                $deliveryDate,
+                            cogsAccount: $journalTransactionLines,
+                            inventoryAccount: null,
+                            amount: null,
+                            referenceId: $do->id,
+                            userId: $dto->createdBy,
+                            journalDate: $deliveryDate,
+                            companyId: $companyId,
                         );
                 }
 
@@ -434,8 +468,12 @@ class DeliveryOrderService
                             null,
 
                         newValues: [
+
                             'do_no' =>
                                 $do->do_no,
+
+                            'company_id' =>
+                                $companyId,
 
                             'delivery_date' =>
                                 $deliveryDate,

@@ -19,6 +19,7 @@ class InventoryTransferService
         private CurrentStockService $currentStockService,
         private InventoryCostingService $costingService,
         private InventoryTransactionService $inventoryTransactionService,
+        private CompanyGuardService $companyGuardService,
     ) {}
 
     /**
@@ -57,25 +58,56 @@ class InventoryTransferService
                     );
                 }
 
-                Warehouse::query()
-                    ->whereKey(
-                        $dto->sourceWarehouseId
-                    )
-                    ->where(
-                        'is_active',
-                        true
-                    )
-                    ->firstOrFail();
+                $sourceWarehouse =
+                    Warehouse::query()
+                        ->whereKey(
+                            $dto->sourceWarehouseId
+                        )
+                        ->where(
+                            'is_active',
+                            true
+                        )
+                        ->firstOrFail();
 
-                Warehouse::query()
-                    ->whereKey(
-                        $dto->destinationWarehouseId
-                    )
-                    ->where(
-                        'is_active',
-                        true
-                    )
-                    ->firstOrFail();
+                $destinationWarehouse =
+                    Warehouse::query()
+                        ->whereKey(
+                            $dto->destinationWarehouseId
+                        )
+                        ->where(
+                            'is_active',
+                            true
+                        )
+                        ->firstOrFail();
+
+                if (
+                    (int) $sourceWarehouse->company_id
+                    !==
+                    (int) $destinationWarehouse->company_id
+                ) {
+                    throw new RuntimeException(
+                        'Inventory transfer warehouses must belong to the same company.'
+                    );
+                }
+
+                $companyId =
+                    (int) $sourceWarehouse->company_id;
+
+                /*
+                |--------------------------------------------------------------------------
+                | Actor Company Guard
+                |--------------------------------------------------------------------------
+                |
+                | Source warehouse determines the authoritative transfer company.
+                | The creator must belong to that company.
+                |
+                */
+
+                $this->companyGuardService
+                    ->assertActorBelongsToCompany(
+                        $dto->createdBy,
+                        $companyId
+                    );
 
                 /*
                 |--------------------------------------------------------------------------
@@ -120,6 +152,9 @@ class InventoryTransferService
 
                 $transfer =
                     InventoryTransfer::create([
+                        'company_id' =>
+                            $companyId,
+
                         'transfer_no' =>
                             $transferNo,
 
@@ -335,6 +370,64 @@ class InventoryTransferService
                         'Inventory transfer must contain at least one item.'
                     );
                 }
+
+                $sourceWarehouse =
+                    Warehouse::query()
+                        ->whereKey(
+                            $transfer->source_warehouse_id
+                        )
+                        ->where(
+                            'is_active',
+                            true
+                        )
+                        ->firstOrFail();
+
+                $destinationWarehouse =
+                    Warehouse::query()
+                        ->whereKey(
+                            $transfer->destination_warehouse_id
+                        )
+                        ->where(
+                            'is_active',
+                            true
+                        )
+                        ->firstOrFail();
+
+                if (
+                    (int) $sourceWarehouse->company_id
+                    !==
+                    (int) $destinationWarehouse->company_id
+                ) {
+                    throw new RuntimeException(
+                        'Inventory transfer warehouses must belong to the same company.'
+                    );
+                }
+
+                if (
+                    (int) $transfer->company_id
+                    !==
+                    (int) $sourceWarehouse->company_id
+                ) {
+                    throw new RuntimeException(
+                        'Inventory transfer company does not match source warehouse company.'
+                    );
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Actor Company Guard
+                |--------------------------------------------------------------------------
+                |
+                | Transfer header is the authoritative transaction company.
+                | The posting actor must belong to the same company.
+                |
+                */
+
+                $this->companyGuardService
+                    ->assertActorBelongsToCompany(
+                        $postedBy,
+                        (int) $transfer->company_id
+                    );
 
                 /*
                 |--------------------------------------------------------------------------

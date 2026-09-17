@@ -4,7 +4,8 @@ namespace App\Services;
 
 use App\DTO\PurchaseInvoiceDTO;
 use App\DTO\AccountPayableDTO;
-use App\Models\User;
+
+use App\Models\GoodsReceipt;
 
 use App\Repositories\Contracts\PurchaseInvoiceRepositoryInterface;
 
@@ -18,6 +19,7 @@ class PurchaseInvoiceService
         private AccountPayableService $accountPayableService,
         private AutoJournalService $autoJournalService,
         private AuditLogService $auditService,
+        private CompanyGuardService $companyGuardService,
     ) {}
 
     public function create(
@@ -26,120 +28,220 @@ class PurchaseInvoiceService
     {
         return DB::transaction(
             function () use ($dto) {
-                $user =
-                    User::query()
+
+                /*
+                |--------------------------------------------------------------------------
+                | Goods Receipt Ownership Authority
+                |--------------------------------------------------------------------------
+                |
+                | Purchase Invoice harus mewarisi company dari Goods Receipt.
+                |
+                | created_by hanya actor/audit information dan tidak boleh menentukan
+                | ownership dokumen.
+                |
+                */
+
+                $goodsReceipt =
+                    GoodsReceipt::query()
                         ->whereKey(
-                            $dto->createdBy
+                            $dto->goodsReceiptId
                         )
+                        ->lockForUpdate()
                         ->firstOrFail();
 
                 $companyId =
-                    (int) $user->company_id;
+                    (int) $goodsReceipt->company_id;
+
+                /*
+                |--------------------------------------------------------------------------
+                | Actor Company Guard
+                |--------------------------------------------------------------------------
+                |
+                | Goods Receipt is the authoritative company ownership source.
+                | createdBy must belong to the same company.
+                |
+                */
+
+                $this->companyGuardService
+                    ->assertActorBelongsToCompany(
+                        $dto->createdBy,
+                        $companyId
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | Create Purchase Invoice
+                |--------------------------------------------------------------------------
+                */
 
                 $invoice =
                     $this->repository->create([
+                        'company_id' =>
+                            $companyId,
+
                         'invoice_no' =>
-                            $this->documentSequenceService
+                            $this
+                                ->documentSequenceService
                                 ->next('INV'),
 
-                        'invoice_date' => now(),
+                        'invoice_date' =>
+                            now(),
 
-                        'goods_receipt_id'
-                            => $dto->goodsReceiptId,
+                        'goods_receipt_id' =>
+                            $goodsReceipt->id,
 
-                        'supplier_name'
-                            => $dto->supplierName,
+                        'supplier_name' =>
+                            $dto->supplierName,
 
-                        'supplier_invoice_no'
-                            => $dto->supplierInvoiceNo,
+                        'supplier_invoice_no' =>
+                            $dto->supplierInvoiceNo,
 
-                        'subtotal'
-                            => $dto->subtotal,
+                        'subtotal' =>
+                            $dto->subtotal,
 
-                        'tax_amount'
-                            => $dto->taxAmount,
+                        'tax_amount' =>
+                            $dto->taxAmount,
 
-                        'grand_total'
-                            => $dto->grandTotal,
+                        'grand_total' =>
+                            $dto->grandTotal,
 
-                        'status'
-                            => 'OPEN',
+                        'status' =>
+                            'OPEN',
 
-                        'created_by'
-                            => $dto->createdBy,
+                        'created_by' =>
+                            $dto->createdBy,
                     ]);
 
-                foreach ($dto->lines as $line) {
+                /*
+                |--------------------------------------------------------------------------
+                | Purchase Invoice Details
+                |--------------------------------------------------------------------------
+                */
 
-                    $invoice->details()->create([
-                        'item_id'
-                            => $line->itemId,
+                foreach (
+                    $dto->lines
+                    as $line
+                ) {
 
-                        'qty'
-                            => $line->qty,
+                    $invoice
+                        ->details()
+                        ->create([
+                            'item_id' =>
+                                $line->itemId,
 
-                        'unit_price'
-                            => $line->unitPrice,
+                            'qty' =>
+                                $line->qty,
 
-                        'amount'
-                            => $line->amount,
+                            'unit_price' =>
+                                $line->unitPrice,
 
-                        'remarks'
-                            => $line->remarks,
-                    ]);
+                            'amount' =>
+                                $line->amount,
+
+                            'remarks' =>
+                                $line->remarks,
+                        ]);
                 }
 
                 /*
-                |--------------------------------
-                | Create AP
-                |--------------------------------
+                |--------------------------------------------------------------------------
+                | Create Account Payable
+                |--------------------------------------------------------------------------
+                |
+                | AP mewarisi company Purchase Invoice.
+                |
                 */
 
-                $this->accountPayableService
+                $this
+                    ->accountPayableService
                     ->create(
                         new AccountPayableDTO(
-                            referenceType : 'PURCHASE_INVOICE',
-                            referenceId   : $invoice->id,
-                            supplierName  : $dto->supplierName,
-                            invoiceDate   : now()->toDateString(),
-                            dueDate       : now()
-                                ->addDays(30)
-                                ->toDateString(),
-                            amount        : $dto->grandTotal
+                            companyId:
+                                $companyId,
+
+                            referenceType:
+                                'PURCHASE_INVOICE',
+
+                            referenceId:
+                                $invoice->id,
+
+                            supplierName:
+                                $dto->supplierName,
+
+                            invoiceDate:
+                                now()->toDateString(),
+
+                            dueDate:
+                                now()
+                                    ->addDays(30)
+                                    ->toDateString(),
+
+                            amount:
+                                $dto->grandTotal,
                         )
                     );
 
                 /*
-                |--------------------------------
+                |--------------------------------------------------------------------------
                 | Journal
-                |--------------------------------
+                |--------------------------------------------------------------------------
+                |
+                | Accounting mapping harus menggunakan company source document,
+                | bukan company creator.
+                |
                 */
 
-                $this->autoJournalService
+                $this
+                    ->autoJournalService
                     ->purchaseInvoice(
-                        amount      :$dto->grandTotal,
-                        referenceId :$invoice->id,
-                        userId      :$dto->createdBy,
-                        companyId   :$companyId
+                        amount:
+                            $dto->grandTotal,
+
+                        referenceId:
+                            $invoice->id,
+
+                        userId:
+                            $dto->createdBy,
+
+                        companyId:
+                            $companyId,
                     );
 
                 /*
-                |--------------------------------
+                |--------------------------------------------------------------------------
                 | Audit
-                |--------------------------------
+                |--------------------------------------------------------------------------
                 */
 
-                $this->auditService->log(
-                    module : 'Purchase Invoice',
-                    action : 'CREATE',
-                    referenceType : 'PurchaseInvoice',
-                    referenceId : $invoice->id,
-                    oldValues : null,
-                    newValues : [
-                        'invoice_no'
-                            => $invoice->invoice_no,
-                    ]
-                );
+                $this
+                    ->auditService
+                    ->log(
+                        module:
+                            'Purchase Invoice',
+
+                        action:
+                            'CREATE',
+
+                        referenceType:
+                            'PurchaseInvoice',
+
+                        referenceId:
+                            $invoice->id,
+
+                        oldValues:
+                            null,
+
+                        newValues: [
+                            'invoice_no' =>
+                                $invoice->invoice_no,
+
+                            'company_id' =>
+                                $invoice->company_id,
+
+                            'goods_receipt_id' =>
+                                $goodsReceipt->id,
+                        ],
+                    );
 
                 return $invoice->load(
                     'details'

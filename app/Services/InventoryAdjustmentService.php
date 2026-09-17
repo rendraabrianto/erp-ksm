@@ -12,6 +12,7 @@ use App\DTO\InventoryTransactionDTO;
 use App\DTO\JournalEntryDTO;
 use App\DTO\JournalLineDTO;
 use App\Models\Account;
+use App\Models\Warehouse;
 
 class InventoryAdjustmentService
 {
@@ -20,6 +21,7 @@ class InventoryAdjustmentService
         private InventoryCostingService $costingService,
         private InventoryTransactionService $inventoryTransactionService,
         private JournalPostingService $journalPostingService,
+        private CompanyGuardService $companyGuardService,
     ) {}
 
     public function create(
@@ -35,8 +37,36 @@ class InventoryAdjustmentService
                     );
                 }
 
+                $warehouse =
+                    Warehouse::query()
+                        ->findOrFail(
+                            $dto->warehouseId
+                        );
+
+                $companyId =
+                    (int) $warehouse->company_id;
+
+                /*
+                |--------------------------------------------------------------------------
+                | Actor Company Guard
+                |--------------------------------------------------------------------------
+                |
+                | Warehouse is the authoritative company ownership source.
+                | createdBy is only the transaction actor.
+                |
+                */
+
+                $this->companyGuardService
+                    ->assertActorBelongsToCompany(
+                        $dto->createdBy,
+                        $companyId
+                    );
+
                 $adjustment =
                     InventoryAdjustment::create([
+                        'company_id' =>
+                            $companyId,
+
                         'adjustment_no' =>
                             $this
                                 ->documentSequenceService
@@ -185,6 +215,22 @@ class InventoryAdjustmentService
                         ->findOrFail(
                             $adjustmentId
                         );
+
+                /*
+                |--------------------------------------------------------------------------
+                | Actor Company Guard
+                |--------------------------------------------------------------------------
+                |
+                | Inventory Adjustment header is the authoritative company owner.
+                | The posting actor must belong to the same company.
+                |
+                */
+
+                $this->companyGuardService
+                    ->assertActorBelongsToCompany(
+                        $postedBy,
+                        (int) $adjustment->company_id
+                    );
 
                 if (
                     $adjustment->status
@@ -531,40 +577,23 @@ class InventoryAdjustmentService
                         ->journalPostingService
                         ->post(
                             new JournalEntryDTO(
-                                referenceType:
-                                    'INVENTORY_ADJUSTMENT',
-
-                                referenceId:
-                                    (int)
-                                    $adjustment->id,
-
-                                description:
-                                    'Inventory Adjustment '
-                                    .
+                                referenceType: 'INVENTORY_ADJUSTMENT',
+                                referenceId: (int) $adjustment->id,
+                                description: 'Inventory Adjustment '                                    .
                                     $adjustment
                                         ->adjustment_no,
-
-                                createdBy:
-                                    $postedBy,
-
-                                lines:
-                                    $lines,
-
+                                createdBy: $postedBy,
+                                lines: $lines,
+                                companyId: (int) $adjustment->company_id,
                                 journalDate:
                                     $adjustment
                                         ->adjustment_date
                                         ->format(
                                             'Y-m-d'
                                         ),
-
-                                journalPurpose:
-                                    'NORMAL',
-
-                                sourceJournalId:
-                                    null,
-
-                                reconciliationKey:
-                                    null,
+                                journalPurpose: 'NORMAL',
+                                sourceJournalId: null,
+                                reconciliationKey: null,
                             )
                         );
                 }

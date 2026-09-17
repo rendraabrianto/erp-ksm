@@ -147,6 +147,7 @@ class AutoJournalService
                 description: 'Auto Journal Goods Receipt',
                 createdBy: $userId,
                 lines: $journalLines,
+                companyId: $companyId,
                 journalDate: $journalDate,
             );
 
@@ -206,7 +207,8 @@ class AutoJournalService
                         credit:$amount,
                         description:'Account Payable'
                     ),
-                ]
+                ],
+                companyId: $companyId,
             );
 
         return $this
@@ -256,7 +258,8 @@ class AutoJournalService
                         credit: $amount,
                         description: 'Kas/Bank'
                     ),
-                ]
+                ],
+                companyId: $companyId,
             );
 
         return $this
@@ -287,9 +290,9 @@ class AutoJournalService
         ?float $amount,
         int $referenceId,
         int $userId,
+        int $companyId,
         ?string $journalDate = null,
-    ) {
-
+    ){
         /*
         |--------------------------------------------------------------------------
         | Normalize Lines
@@ -455,6 +458,7 @@ class AutoJournalService
                 description: 'Auto Journal Delivery Order',
                 createdBy: $userId,
                 lines: $journalLines,
+                companyId: $companyId,
                 journalDate: $journalDate,
             );
 
@@ -629,20 +633,12 @@ class AutoJournalService
 
         $entry =
             new JournalEntryDTO(
-                referenceType:
-                    'SALES_INVOICE',
-
-                referenceId:
-                    $referenceId,
-
-                description:
-                    'Auto Journal Sales Invoice',
-
-                createdBy:
-                    $userId,
-
-                lines:
-                    $journalLines,
+                referenceType: 'SALES_INVOICE',
+                referenceId: $referenceId,
+                description: 'Auto Journal Sales Invoice',
+                createdBy: $userId,
+                lines: $journalLines,
+                companyId: $companyId,
             );
 
         return $this
@@ -691,59 +687,30 @@ class AutoJournalService
 
         $entry =
             new JournalEntryDTO(
-                referenceType:
-                    'CUSTOMER_RECEIPT',
-
-                referenceId:
-                    $referenceId,
-
-                description:
-                    'Customer Receipt',
-
-                createdBy:
-                    $userId,
-
+                referenceType: 'CUSTOMER_RECEIPT',
+                referenceId: $referenceId,
+                description: 'Customer Receipt',
+                createdBy: $userId,
                 lines: [
                     new JournalLineDTO(
-                        accountCode:
-                            $cashBankAccount->code,
-
-                        debit:
-                            $amount,
-
-                        credit:
-                            0,
-
-                        quantity:
-                            0,
-
-                        unitPrice:
-                            0,
-
-                        description:
-                            'Kas / Bank'
+                        accountCode: $cashBankAccount->code,
+                        debit: $amount,
+                        credit: 0,
+                        quantity: 0,
+                        unitPrice: 0,
+                        description: 'Kas / Bank'
                     ),
 
                     new JournalLineDTO(
-                        accountCode:
-                            $arAccount->code,
-
-                        debit:
-                            0,
-
-                        credit:
-                            $amount,
-
-                        quantity:
-                            0,
-
-                        unitPrice:
-                            0,
-
-                        description:
-                            'Piutang Dagang'
+                        accountCode: $arAccount->code,
+                        debit: 0,
+                        credit: $amount,
+                        quantity: 0,
+                        unitPrice: 0,
+                        description: 'Piutang Dagang'
                     ),
-                ]
+                ],
+                companyId: $companyId,
             );
 
         return $this

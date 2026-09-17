@@ -4,28 +4,30 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PaymentVoucher extends Model
 {
     use SoftDeletes;
 
     protected $fillable = [
-
         'voucher_no',
         'voucher_date',
-
         'account_payable_id',
-
         'cash_bank_account_id',
-
         'amount',
-
         'payment_method',
-
         'remarks',
-
         'created_by',
+        'company_id',
     ];
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(
+            Company::class
+        );
+    }
 
     public function accountPayable()
     {

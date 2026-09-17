@@ -4,6 +4,7 @@ namespace App\Services;
 use App\DTO\JournalEntryDTO;
 use App\DTO\JournalLineDTO;
 use App\Models\Account;
+use App\Models\Warehouse;
 use Illuminate\Support\Facades\DB;
 
 use App\DTO\InventoryHistoricalReconciliationDTO;
@@ -238,6 +239,15 @@ class InventoryReconciliationAdjustmentService
                 |--------------------------------------------------------------------------
                 */
 
+                $warehouse =
+                    Warehouse::query()
+                        ->findOrFail(
+                            $dto->warehouseId
+                        );
+
+                $companyId =
+                    (int) $warehouse->company_id;
+
                 $preview =
                     $this->preview($dto);
 
@@ -390,6 +400,9 @@ class InventoryReconciliationAdjustmentService
 
                             lines:
                                 $lines,
+
+                            companyId:
+                                $companyId,
 
                             journalDate:
                                 $proposal[

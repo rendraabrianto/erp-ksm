@@ -265,6 +265,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $salesInvoiceId =
             DB::table('sales_invoices')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'invoice_no' =>
                         'INV-CR-001',
 
@@ -317,6 +320,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $accountReceivableId =
             DB::table('account_receivables')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'customer_id' =>
                         $customerId,
 
@@ -652,6 +658,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $salesInvoiceId =
             DB::table('sales_invoices')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'invoice_no' =>
                         'INV-CR-RB',
 
@@ -704,6 +713,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $accountReceivableId =
             DB::table('account_receivables')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'customer_id' =>
                         $customerId,
 
@@ -974,6 +986,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $salesInvoiceId =
             DB::table('sales_invoices')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'invoice_no' =>
                         'INV-CR-AMT',
 
@@ -1020,6 +1035,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $accountReceivableId =
             DB::table('account_receivables')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'customer_id' =>
                         $customerId,
 
@@ -1219,6 +1237,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $salesInvoiceId =
             DB::table('sales_invoices')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'invoice_no' =>
                         'INV-CR-CUST',
 
@@ -1265,6 +1286,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $accountReceivableId =
             DB::table('account_receivables')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'customer_id' =>
                         $customerAId,
 
@@ -1423,6 +1447,8 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $salesInvoiceId =
             DB::table('sales_invoices')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
                     'invoice_no' =>
                         'INV-CR-OVER',
                     'customer_id' =>
@@ -1456,6 +1482,8 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $accountReceivableId =
             DB::table('account_receivables')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
                     'customer_id' =>
                         $customerId,
                     'sales_invoice_id' =>
@@ -1616,6 +1644,8 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $salesInvoiceId =
             DB::table('sales_invoices')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
                     'invoice_no' =>
                         'INV-CR-PAID',
                     'customer_id' =>
@@ -1649,6 +1679,8 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $accountReceivableId =
             DB::table('account_receivables')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
                     'customer_id' =>
                         $customerId,
                     'sales_invoice_id' =>

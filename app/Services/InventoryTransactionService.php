@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\DTO\InventoryTransactionDTO;
 use App\Models\Item;
+use App\Models\Warehouse;
 use App\Repositories\Contracts\StockLedgerRepositoryInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -56,6 +57,22 @@ class InventoryTransactionService
                     $dto->transactionDate
                     ??
                     now()->toDateString();
+
+                /*
+                |--------------------------------------------------------------------------
+                | Resolve Warehouse Ownership
+                |--------------------------------------------------------------------------
+                */
+
+                $warehouse =
+                    Warehouse::query()
+                        ->lockForUpdate()
+                        ->findOrFail(
+                            $dto->warehouseId
+                        );
+
+                $companyId =
+                    (int) $warehouse->company_id;
 
                 /*
                 |--------------------------------------------------------------------------
@@ -184,6 +201,9 @@ class InventoryTransactionService
                     $this
                         ->stockLedgerRepository
                         ->create([
+                            'company_id' =>
+                                $companyId,
+
                             'warehouse_id' =>
                                 $dto->warehouseId,
 

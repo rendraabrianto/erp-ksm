@@ -8,7 +8,6 @@ use App\Models\DeliveryOrder;
 use App\Models\Item;
 use App\Repositories\Contracts\SalesInvoiceRepositoryInterface;
 use Illuminate\Support\Facades\DB;
-use App\Models\User;
 
 class SalesInvoiceService
 {
@@ -18,6 +17,7 @@ class SalesInvoiceService
         private DocumentSequenceService $documentSequenceService,
         private AutoJournalService $autoJournalService,
         private AuditLogService $auditService,
+        protected CompanyGuardService $companyGuardService,
 
     ) {}
 
@@ -29,29 +29,29 @@ class SalesInvoiceService
 
             /*
             |--------------------------------------------------------------------------
-            | Resolve Company
-            |--------------------------------------------------------------------------
-            */
-
-            $user =
-                User::query()
-                    ->whereKey(
-                        $dto->createdBy
-                    )
-                    ->firstOrFail();
-
-            $companyId =
-                (int) $user->company_id;
-            /*
-            |--------------------------------------------------------------------------
             | VALIDASI DELIVERY ORDER
+            |--------------------------------------------------------------------------
+            |
+            | Delivery Order adalah ownership authority untuk Sales Invoice.
+            |
             |--------------------------------------------------------------------------
             */
 
             $deliveryOrder =
-                DeliveryOrder::findOrFail(
-                    $dto->deliveryOrderId
-                );
+                DeliveryOrder::query()
+                    ->whereKey(
+                        $dto->deliveryOrderId
+                    )
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+            $companyId =
+                (int) $deliveryOrder->company_id;
+
+            $this->companyGuardService->assertActorBelongsToCompany(
+                $dto->createdBy,
+                $companyId
+            );
 
             /*
             |--------------------------------------------------------------------------
@@ -100,6 +100,9 @@ class SalesInvoiceService
 
             $invoice =
                 $this->repository->create([
+
+                    'company_id' =>
+                        $companyId,
 
                     'invoice_no' =>
                         $this->documentSequenceService
@@ -179,9 +182,16 @@ class SalesInvoiceService
             |--------------------------------------------------------------------------
             | CREATE ACCOUNT RECEIVABLE
             |--------------------------------------------------------------------------
+            |
+            | AR mewarisi company dari Sales Invoice / Delivery Order.
+            |
+            |--------------------------------------------------------------------------
             */
 
             AccountReceivable::create([
+
+                'company_id' =>
+                    $companyId,
 
                 'customer_id' =>
                     $invoice->customer_id,
@@ -300,13 +310,22 @@ class SalesInvoiceService
             */
 
             $this->autoJournalService
-            ->salesInvoice(
-                salesAccount:$salesJournalLines,
-                amount:null,
-                referenceId:$invoice->id,
-                userId:$dto->createdBy,
-                companyId:$companyId,
-            );
+                ->salesInvoice(
+                    salesAccount:
+                        $salesJournalLines,
+
+                    amount:
+                        null,
+
+                    referenceId:
+                        $invoice->id,
+
+                    userId:
+                        $dto->createdBy,
+
+                    companyId:
+                        $companyId,
+                );
 
             /*
             |--------------------------------------------------------------------------
@@ -315,9 +334,8 @@ class SalesInvoiceService
             */
 
             $deliveryOrder->update([
-
                 'status' =>
-                    'INVOICED'
+                    'INVOICED',
             ]);
 
             /*
@@ -328,25 +346,31 @@ class SalesInvoiceService
 
             $this->auditService->log(
 
-                module :
+                module:
                     'Sales Invoice',
 
-                action :
+                action:
                     'CREATE',
 
-                referenceType :
+                referenceType:
                     'SalesInvoice',
 
-                referenceId :
+                referenceId:
                     $invoice->id,
 
-                oldValues :
+                oldValues:
                     null,
 
-                newValues : [
+                newValues: [
 
                     'invoice_no' =>
                         $invoice->invoice_no,
+
+                    'company_id' =>
+                        $companyId,
+
+                    'delivery_order_id' =>
+                        $deliveryOrder->id,
                 ]
             );
 

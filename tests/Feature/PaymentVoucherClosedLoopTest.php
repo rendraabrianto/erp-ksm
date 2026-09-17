@@ -237,6 +237,9 @@ class PaymentVoucherClosedLoopTest extends TestCase
         $accountPayableId =
             DB::table('account_payables')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'reference_type' =>
                         'PURCHASE_INVOICE',
 
@@ -533,6 +536,9 @@ class PaymentVoucherClosedLoopTest extends TestCase
         $accountPayableId =
             DB::table('account_payables')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'reference_type' =>
                         'PURCHASE_INVOICE',
 
@@ -716,6 +722,210 @@ class PaymentVoucherClosedLoopTest extends TestCase
         $this->assertSame(
             $apBefore->status,
             $apAfter->status
+        );
+    }
+
+    public function test_payment_voucher_inherits_company_from_account_payable(): void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Asset Account Group
+        |--------------------------------------------------------------------------
+        */
+
+        $assetGroupId =
+            DB::table('account_groups')
+                ->where(
+                    'code',
+                    'AST-T'
+                )
+                ->value('id');
+
+        $this->assertNotNull(
+            $assetGroupId
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Cash / Bank Account
+        |--------------------------------------------------------------------------
+        */
+
+        $cashBankAccountId =
+            DB::table('accounts')
+                ->insertGetId([
+                    'account_group_id' =>
+                        $assetGroupId,
+
+                    'code' =>
+                        '1007-PV-COMP',
+
+                    'name' =>
+                        'Bank PV Company Ownership Test',
+
+                    'normal_balance' =>
+                        'DEBIT',
+
+                    'is_header' =>
+                        false,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Account Payable Company A
+        |--------------------------------------------------------------------------
+        */
+
+        $accountPayableId =
+            DB::table('account_payables')
+                ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
+                    'reference_type' =>
+                        'PURCHASE_INVOICE',
+
+                    'reference_id' =>
+                        999003,
+
+                    'supplier_name' =>
+                        'Supplier PV Company Test',
+
+                    'invoice_date' =>
+                        '2026-08-10',
+
+                    'due_date' =>
+                        '2026-09-10',
+
+                    'amount' =>
+                        100000,
+
+                    'paid_amount' =>
+                        0,
+
+                    'balance_amount' =>
+                        100000,
+
+                    'status' =>
+                        'OPEN',
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Create Payment Voucher
+        |--------------------------------------------------------------------------
+        |
+        | Actor berasal dari Company B.
+        |
+        | Tetapi ownership Payment Voucher harus tetap mengikuti
+        | Account Payable Company A.
+        |--------------------------------------------------------------------------
+        */
+
+        $voucher =
+            app(PaymentVoucherService::class)
+                ->create(
+                    new PaymentVoucherDTO(
+                        accountPayableId:
+                            $accountPayableId,
+
+                        cashBankAccountId:
+                            $cashBankAccountId,
+
+                        amount:
+                            40000,
+
+                        paymentMethod:
+                            'BANK_TRANSFER',
+
+                        remarks:
+                            'PV company ownership test',
+
+                        createdBy:
+                            $this->data['user_id'],
+                    )
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Same-Company Actor Sanity Check
+        |--------------------------------------------------------------------------
+        */
+
+        $actorCompanyId =
+            (int) DB::table('users')
+                ->where(
+                    'id',
+                    $this->data['user_id']
+                )
+                ->value('company_id');
+
+        $this->assertSame(
+            (int) $this->data['company_id'],
+            $actorCompanyId
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Payment Voucher Must Belong To AP Company
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            (int) $this->data['company_id'],
+            (int) $voucher->company_id
+        );
+
+        $this->assertDatabaseHas(
+            'payment_vouchers',
+            [
+                'id' =>
+                    $voucher->id,
+
+                'account_payable_id' =>
+                    $accountPayableId,
+
+                'company_id' =>
+                    $this->data['company_id'],
+            ]
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | AP Still Belongs To Company A
+        |--------------------------------------------------------------------------
+        */
+
+        $ap =
+            DB::table('account_payables')
+                ->where(
+                    'id',
+                    $accountPayableId
+                )
+                ->first();
+
+        $this->assertNotNull(
+            $ap
+        );
+
+        $this->assertSame(
+            (int) $this->data['company_id'],
+            (int) $ap->company_id
         );
     }
 }

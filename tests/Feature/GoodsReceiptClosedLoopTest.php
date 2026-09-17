@@ -765,6 +765,8 @@ class GoodsReceiptClosedLoopTest extends TestCase
     {
         $po =
             PurchaseOrder::create([
+                'company_id' =>
+                    $this->data['company_id'],
                 'po_no' =>
                     'PO-DUP-'
                     .
@@ -1975,6 +1977,9 @@ class GoodsReceiptClosedLoopTest extends TestCase
 
         $po =
             PurchaseOrder::create([
+                'company_id' =>
+                $this->data['company_id'],
+
                 'po_no' =>
                     'PO-TEST-'
                     .

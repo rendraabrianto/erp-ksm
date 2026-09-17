@@ -16,14 +16,15 @@ class PurchaseOrder extends Model
         'remarks',
         'status',
         'created_by',
+        'company_id',
     ];
 
-    // public function details(): HasMany
-    // {
-    //     return $this->hasMany(
-    //         PurchaseOrderDetail::class
-    //     );
-    // }
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(
+            Company::class
+        );
+    }
 
     public function details()
     {

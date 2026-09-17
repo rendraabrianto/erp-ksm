@@ -300,6 +300,8 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $salesOrderId =
             DB::table('sales_orders')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
                     'so_no' =>
                         'SO-SI-001',
 
@@ -374,6 +376,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $deliveryOrderId =
             DB::table('delivery_orders')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'do_no' =>
                         'DO-SI-001',
 
@@ -880,6 +885,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $salesOrderId =
             DB::table('sales_orders')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'so_no' =>
                         'SO-SI-ML',
 
@@ -979,6 +987,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $deliveryOrderId =
             DB::table('delivery_orders')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'do_no' =>
                         'DO-SI-ML',
 
@@ -1372,6 +1383,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $salesOrderId =
             DB::table('sales_orders')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'so_no' =>
                         'SO-SI-RB',
 
@@ -1440,6 +1454,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $deliveryOrderId =
             DB::table('delivery_orders')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'do_no' =>
                         'DO-SI-RB',
 
