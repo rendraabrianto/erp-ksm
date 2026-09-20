@@ -6,6 +6,7 @@ use App\DTO\SalesInvoiceDTO;
 use App\Models\AccountReceivable;
 use App\Models\DeliveryOrder;
 use App\Models\Item;
+use App\Models\Customer;
 use App\Repositories\Contracts\SalesInvoiceRepositoryInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -59,6 +60,33 @@ class SalesInvoiceService
                         $dto->createdBy,
                         $companyId
                     );
+
+                /*
+                |--------------------------------------------------------------------------
+                | CUSTOMER COMPANY GUARD
+                |--------------------------------------------------------------------------
+                |
+                | Customer wajib berasal dari company yang sama dengan Delivery Order /
+                | Sales Invoice.
+                |
+                */
+
+                $customer =
+                    Customer::query()
+                        ->whereKey(
+                            $dto->customerId
+                        )
+                        ->firstOrFail();
+
+                if (
+                    (int) $customer->company_id
+                    !==
+                    $companyId
+                ) {
+                    throw new \RuntimeException(
+                        'Customer does not belong to transaction company.'
+                    );
+                }
 
                 /*
                 |--------------------------------------------------------------------------
@@ -120,7 +148,7 @@ class SalesInvoiceService
                                     ->next('INV'),
 
                             'customer_id' =>
-                                $dto->customerId,
+                                $customer->id,
 
                             'delivery_order_id' =>
                                 $dto->deliveryOrderId,

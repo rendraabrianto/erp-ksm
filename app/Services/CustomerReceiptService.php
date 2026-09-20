@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\DTO\CustomerReceiptDTO;
 use App\Models\AccountReceivable;
+use App\Models\Customer;
 use App\Repositories\Contracts\CustomerReceiptRepositoryInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -121,6 +122,33 @@ class CustomerReceiptService
 
             /*
             |--------------------------------------------------------------------------
+            | Customer Company Guard
+            |--------------------------------------------------------------------------
+            |
+            | Customer yang dimiliki Account Receivable wajib berasal dari company
+            | yang sama dengan Account Receivable / Customer Receipt.
+            |
+            */
+
+            $customer =
+                Customer::query()
+                    ->whereKey(
+                        $ar->customer_id
+                    )
+                    ->firstOrFail();
+
+            if (
+                (int) $customer->company_id
+                !==
+                $companyId
+            ) {
+                throw new \RuntimeException(
+                    'Customer does not belong to transaction company.'
+                );
+            }
+
+            /*
+            |--------------------------------------------------------------------------
             | Validate Receivable Status
             |--------------------------------------------------------------------------
             */
@@ -168,7 +196,7 @@ class CustomerReceiptService
                             ->next('CR'),
 
                     'customer_id' =>
-                        $dto->customerId,
+                        $customer->id,
 
                     'account_receivable_id' =>
                         $dto->accountReceivableId,

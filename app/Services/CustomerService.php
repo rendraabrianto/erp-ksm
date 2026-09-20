@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\DTO\CustomerDTO;
-
 use App\Repositories\Contracts\CustomerRepositoryInterface;
 
 class CustomerService
@@ -15,10 +14,11 @@ class CustomerService
 
     public function create(
         CustomerDTO $dto
-    )
-    {
+    ) {
         $customer =
             $this->repository->create([
+                'company_id' =>
+                    $dto->companyId,
 
                 'code' =>
                     $dto->code,
@@ -43,14 +43,30 @@ class CustomerService
             ]);
 
         $this->auditService->log(
-            module : 'Customer',
-            action : 'CREATE',
-            referenceType : 'Customer',
-            referenceId : $customer->id,
-            oldValues : null,
-            newValues : [
-                'code' => $customer->code,
-                'name' => $customer->name,
+            module:
+                'Customer',
+
+            action:
+                'CREATE',
+
+            referenceType:
+                'Customer',
+
+            referenceId:
+                $customer->id,
+
+            oldValues:
+                null,
+
+            newValues: [
+                'company_id' =>
+                    $customer->company_id,
+
+                'code' =>
+                    $customer->code,
+
+                'name' =>
+                    $customer->name,
             ]
         );
 

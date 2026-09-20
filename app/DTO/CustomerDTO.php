@@ -5,6 +5,7 @@ namespace App\DTO;
 class CustomerDTO
 {
     public function __construct(
+        public int $companyId,
         public string $code,
         public string $name,
         public ?string $phone,

@@ -93,7 +93,7 @@ class SalesCycleCompanyOwnershipTest extends TestCase
                     ->create(
                         new SalesOrderDTO(
                             customerId:
-                                999999,
+                                $this->data['customer_id'],
 
                             deliveryDate:
                                 '2026-08-08',
@@ -662,6 +662,220 @@ class SalesCycleCompanyOwnershipTest extends TestCase
         );
     }
 
+    public function test_sales_invoice_rejects_customer_from_another_company(): void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyB =
+            $this->createSecondCompany();
+
+        $companyBId =
+            (int) $companyB[0];
+
+        /*
+        |--------------------------------------------------------------------------
+        | Customer — Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $customerBId =
+            DB::table('customers')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'code' =>
+                        'CUS-SI-B-' . substr(
+                            uniqid(),
+                            -6
+                        ),
+
+                    'name' =>
+                        'Sales Invoice Customer Company B',
+
+                    'phone' =>
+                        null,
+
+                    'email' =>
+                        null,
+
+                    'address' =>
+                        null,
+
+                    'credit_limit' =>
+                        1000000,
+
+                    'credit_days' =>
+                        30,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Delivery Order — Company A
+        |--------------------------------------------------------------------------
+        |
+        | Delivery Order adalah ownership authority Sales Invoice.
+        |
+        */
+
+        DB::statement(
+            'SET FOREIGN_KEY_CHECKS=0'
+        );
+
+        try {
+            $deliveryOrder =
+                DeliveryOrder::create([
+                    'company_id' =>
+                        $this->data['company_id'],
+
+                    'do_no' =>
+                        'DO-SI-CUST-GUARD-' . uniqid(),
+
+                    'sales_order_id' =>
+                        999998,
+
+                    'delivery_date' =>
+                        '2026-08-08',
+
+                    'status' =>
+                        'POSTED',
+
+                    'remarks' =>
+                        'Sales invoice customer company guard fixture',
+
+                    'created_by' =>
+                        $this->data['user_id'],
+                ]);
+        } finally {
+            DB::statement(
+                'SET FOREIGN_KEY_CHECKS=1'
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Snapshot Sebelum Attack
+        |--------------------------------------------------------------------------
+        */
+
+        $salesInvoiceCountBefore =
+            DB::table('sales_invoices')
+                ->count();
+
+        $accountReceivableCountBefore =
+            DB::table('account_receivables')
+                ->count();
+
+        $journalCountBefore =
+            DB::table('journals')
+                ->count();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Cross-Company Customer Attack
+        |--------------------------------------------------------------------------
+        |
+        | Actor        = Company A
+        | DO           = Company A
+        | Customer     = Company B
+        |
+        */
+
+        try {
+            app(SalesInvoiceService::class)
+                ->create(
+                    new SalesInvoiceDTO(
+                        customerId:
+                            $customerBId,
+
+                        deliveryOrderId:
+                            $deliveryOrder->id,
+
+                        dueDate:
+                            '2026-09-08',
+
+                        remarks:
+                            'Cross-company customer SI test',
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        lines: [
+                            new SalesInvoiceLineDTO(
+                                itemId:
+                                    $this->data['item_id'],
+
+                                qty:
+                                    1,
+
+                                unitPrice:
+                                    10000,
+
+                                discount:
+                                    0,
+
+                                remarks:
+                                    'Must reject foreign customer',
+                            ),
+                        ],
+                    )
+                );
+
+            $this->fail(
+                'Expected RuntimeException was not thrown.'
+            );
+        } catch (RuntimeException $e) {
+            $this->assertSame(
+                'Customer does not belong to transaction company.',
+                $e->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Atomicity Assertions
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $salesInvoiceCountBefore,
+            DB::table('sales_invoices')
+                ->count()
+        );
+
+        $this->assertSame(
+            $accountReceivableCountBefore,
+            DB::table('account_receivables')
+                ->count()
+        );
+
+        $this->assertSame(
+            $journalCountBefore,
+            DB::table('journals')
+                ->count()
+        );
+
+        $deliveryOrder->refresh();
+
+        $this->assertSame(
+            'POSTED',
+            $deliveryOrder->status
+        );
+    }
+
     private function createSalesOrder(): array
     {
         DB::statement(
@@ -911,6 +1125,9 @@ class SalesCycleCompanyOwnershipTest extends TestCase
         $customerId =
             DB::table('customers')
                 ->insertGetId([
+                    'company_id' =>
+                        $companyAId,
+
                     'code' =>
                         'CUS-CR-GUARD',
 
@@ -1363,7 +1580,7 @@ class SalesCycleCompanyOwnershipTest extends TestCase
                     ->create(
                         new SalesOrderDTO(
                             customerId:
-                                999999,
+                                $this->data['customer_id'],
 
                             deliveryDate:
                                 '2026-08-08',
@@ -1496,6 +1713,122 @@ class SalesCycleCompanyOwnershipTest extends TestCase
                 'item_id' =>
                     $itemB->id,
             ]
+        );
+    }
+
+    public function test_sales_order_rejects_customer_from_another_company(): void
+    {
+        $companyB =
+            $this->createSecondCompany();
+
+        $customerBId =
+            DB::table('customers')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyB[0],
+
+                    'code' =>
+                        'CUS-B-' . substr(
+                            uniqid(),
+                            -6
+                        ),
+
+                    'name' =>
+                        'Customer Company B',
+
+                    'phone' =>
+                        null,
+
+                    'email' =>
+                        null,
+
+                    'address' =>
+                        null,
+
+                    'credit_limit' =>
+                        0,
+
+                    'credit_days' =>
+                        0,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        $salesOrderCountBefore =
+            DB::table('sales_orders')
+                ->count();
+
+        $salesOrderDetailCountBefore =
+            DB::table('sales_order_details')
+                ->count();
+
+        try {
+
+            app(SalesOrderService::class)
+                ->create(
+                    new SalesOrderDTO(
+                        customerId:
+                            $customerBId,
+
+                        deliveryDate:
+                            '2026-08-08',
+
+                        remarks:
+                            'Cross-company SO customer attack',
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        lines: [
+                            new SalesOrderLineDTO(
+                                itemId:
+                                    $this->data['item_id'],
+
+                                qty:
+                                    1,
+
+                                unitPrice:
+                                    10000,
+
+                                discount:
+                                    0,
+
+                                remarks:
+                                    'Cross-company customer guard'
+                            ),
+                        ]
+                    )
+                );
+
+            $this->fail(
+                'Cross-company customer was accepted by SalesOrderService.'
+            );
+
+        } catch (\RuntimeException $exception) {
+
+            $this->assertSame(
+                'Customer does not belong to transaction company.',
+                $exception->getMessage()
+            );
+        }
+
+        $this->assertSame(
+            $salesOrderCountBefore,
+            DB::table('sales_orders')
+                ->count()
+        );
+
+        $this->assertSame(
+            $salesOrderDetailCountBefore,
+            DB::table('sales_order_details')
+                ->count()
         );
     }
 }

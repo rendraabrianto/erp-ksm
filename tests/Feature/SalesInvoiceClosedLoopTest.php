@@ -289,6 +289,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $customerId =
             DB::table('customers')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'code' =>
                         'CUS-SI-001',
 
@@ -322,6 +325,7 @@ class SalesInvoiceClosedLoopTest extends TestCase
                 ->insertGetId([
                     'company_id' =>
                         $this->data['company_id'],
+                        
                     'so_no' =>
                         'SO-SI-001',
 
@@ -889,6 +893,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $customerId =
             DB::table('customers')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'code' =>
                         'CUS-SI-ML',
 
@@ -1393,6 +1400,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $customerId =
             DB::table('customers')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'code' =>
                         'CUS-SI-RB',
 
@@ -1889,17 +1899,21 @@ class SalesInvoiceClosedLoopTest extends TestCase
 
         /*
         |--------------------------------------------------------------------------
-        | Customer
+        | Customer — Company A
         |--------------------------------------------------------------------------
         |
-        | Customer belum company-scoped pada H2.4.
-        | Company isolation Customer akan ditangani pada tahap berikutnya.
+        | Customer belongs to the same company as the Sales Order.
+        | The cross-company attack in this test comes from the sales account
+        | belonging to Company B.
         |
         */
 
         $customerId =
             DB::table('customers')
                 ->insertGetId([
+                    'company_id' =>
+                        $companyAId,
+
                     'code' =>
                         'CUS-SI-ATTACK',
 

@@ -276,6 +276,54 @@ class InventoryReconciliationTestData
 
         /*
         |--------------------------------------------------------------------------
+        | Customer
+        |--------------------------------------------------------------------------
+        |
+        | Customer fixture milik company utama.
+        | Digunakan oleh sales-cycle tests setelah Customer menjadi
+        | company-scoped master data.
+        |
+        */
+
+        $customerId =
+            DB::table('customers')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyId,
+
+                    'code' =>
+                        'CUSTOMER-TEST',
+
+                    'name' =>
+                        'Sales Test Customer',
+
+                    'phone' =>
+                        null,
+
+                    'email' =>
+                        null,
+
+                    'address' =>
+                        null,
+
+                    'credit_limit' =>
+                        0,
+
+                    'credit_days' =>
+                        0,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
         | Stock Ledger
         |--------------------------------------------------------------------------
         |
@@ -544,6 +592,7 @@ class InventoryReconciliationTestData
             'user_id'              => $userId,
             'warehouse_id'         => $warehouseId,
             'item_id'              => $itemId,
+            'customer_id'          => $customerId,
             'inventory_account_id' => $inventoryAccountId,
             'cogs_account_id'      => $cogsAccountId,
             'grni_account_id'      => $grniAccountId,

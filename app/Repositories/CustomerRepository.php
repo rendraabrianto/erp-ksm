@@ -8,18 +8,31 @@ use App\Repositories\Contracts\CustomerRepositoryInterface;
 class CustomerRepository
 implements CustomerRepositoryInterface
 {
-    public function all()
-    {
-        return Customer::latest()
+    public function all(
+        int $companyId
+    ) {
+        return Customer::query()
+            ->where(
+                'company_id',
+                $companyId
+            )
+            ->latest()
             ->paginate(20);
     }
 
     public function find(
-        int $id
+        int $id,
+        int $companyId
     ) {
-        return Customer::findOrFail(
-            $id
-        );
+        return Customer::query()
+            ->where(
+                'company_id',
+                $companyId
+            )
+            ->whereKey(
+                $id
+            )
+            ->firstOrFail();
     }
 
     public function create(
@@ -32,16 +45,28 @@ implements CustomerRepositoryInterface
 
     public function update(
         int $id,
+        int $companyId,
         array $data
     ) {
-        return $this->find($id)
-            ->update($data);
+        return $this
+            ->find(
+                $id,
+                $companyId
+            )
+            ->update(
+                $data
+            );
     }
 
     public function delete(
-        int $id
+        int $id,
+        int $companyId
     ) {
-        return $this->find($id)
+        return $this
+            ->find(
+                $id,
+                $companyId
+            )
             ->delete();
     }
 }

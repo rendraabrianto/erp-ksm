@@ -5,6 +5,7 @@ namespace App\Services;
 use App\DTO\SalesOrderDTO;
 use App\Models\User;
 use App\Models\Item;
+use App\Models\Customer;
 use App\Repositories\Contracts\SalesOrderRepositoryInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -47,6 +48,36 @@ class SalesOrderService
 
                 /*
                 |--------------------------------------------------------------------------
+                | Customer Company Ownership
+                |--------------------------------------------------------------------------
+                |
+                | Customer pada Sales Order wajib dimiliki company yang sama
+                | dengan company Sales Order.
+                |
+                | Validasi dilakukan sebelum header Sales Order dibuat agar
+                | cross-company customer tidak pernah menghasilkan dokumen parsial.
+                |
+                */
+
+                $customer =
+                    Customer::query()
+                        ->whereKey(
+                            $dto->customerId
+                        )
+                        ->firstOrFail();
+
+                if (
+                    (int) $customer->company_id
+                    !==
+                    $companyId
+                ) {
+                    throw new \RuntimeException(
+                        'Customer does not belong to transaction company.'
+                    );
+                }
+
+                /*
+                |--------------------------------------------------------------------------
                 | Create Sales Order
                 |--------------------------------------------------------------------------
                 */
@@ -64,7 +95,7 @@ class SalesOrderService
                                     ->next('SO'),
 
                             'customer_id' =>
-                                $dto->customerId,
+                                $customer->id,
 
                             'order_date' =>
                                 now()->toDateString(),

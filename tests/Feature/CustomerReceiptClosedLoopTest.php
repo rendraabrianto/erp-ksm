@@ -246,6 +246,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $customerId =
             DB::table('customers')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'code' =>
                         'CUS-CR-001',
 
@@ -650,6 +653,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $customerId =
             DB::table('customers')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'code' =>
                         'CUS-CR-RB',
 
@@ -991,6 +997,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $customerId =
             DB::table('customers')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'code' =>
                         'CUS-CR-AMT',
 
@@ -1224,6 +1233,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $customerAId =
             DB::table('customers')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'code' =>
                         'CUS-CR-A',
 
@@ -1249,6 +1261,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $customerBId =
             DB::table('customers')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'code' =>
                         'CUS-CR-B',
 
@@ -1430,6 +1445,305 @@ class CustomerReceiptClosedLoopTest extends TestCase
         );
     }
 
+    public function test_customer_receipt_rejects_customer_from_another_company(): void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Company A
+        |--------------------------------------------------------------------------
+        */
+
+        $companyAId =
+            (int) $this->data['company_id'];
+
+        /*
+        |--------------------------------------------------------------------------
+        | Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyBId =
+            DB::table('companies')
+                ->insertGetId([
+                    'code' =>
+                        'CR-COMP-B-' . substr(
+                            uniqid(),
+                            -6
+                        ),
+
+                    'name' =>
+                        'Customer Receipt Company B',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Customer — Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $customerBId =
+            DB::table('customers')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'code' =>
+                        'CUS-CR-CROSS-' . substr(
+                            uniqid(),
+                            -6
+                        ),
+
+                    'name' =>
+                        'Customer Receipt Cross Company Customer',
+
+                    'credit_limit' =>
+                        1000000,
+
+                    'credit_days' =>
+                        30,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Account Receivable — Company A / Customer B
+        |--------------------------------------------------------------------------
+        |
+        | Fixture ini sengaja membuat inconsistent legacy/corrupt ownership:
+        |
+        | AR Company A
+        | Customer Company B
+        |
+        | Service wajib menolak kondisi ini.
+        |
+        */
+
+        DB::statement(
+            'SET FOREIGN_KEY_CHECKS=0'
+        );
+
+        try {
+            $accountReceivableId =
+                DB::table('account_receivables')
+                    ->insertGetId([
+                        'company_id' =>
+                            $companyAId,
+
+                        'customer_id' =>
+                            $customerBId,
+
+                        'sales_invoice_id' =>
+                            999995,
+
+                        'invoice_date' =>
+                            '2026-08-13',
+
+                        'due_date' =>
+                            '2026-09-13',
+
+                        'amount' =>
+                            100000,
+
+                        'paid_amount' =>
+                            0,
+
+                        'balance_amount' =>
+                            100000,
+
+                        'status' =>
+                            'OPEN',
+
+                        'remarks' =>
+                            'Cross-company customer ownership fixture',
+
+                        'created_at' =>
+                            now(),
+
+                        'updated_at' =>
+                            now(),
+                    ]);
+        } finally {
+            DB::statement(
+                'SET FOREIGN_KEY_CHECKS=1'
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Cash / Bank Account — Company A
+        |--------------------------------------------------------------------------
+        */
+
+        $assetGroupId =
+            DB::table('account_groups')
+                ->where(
+                    'company_id',
+                    $companyAId
+                )
+                ->where(
+                    'code',
+                    'AST-T'
+                )
+                ->value('id');
+
+        $this->assertNotNull(
+            $assetGroupId
+        );
+
+        $bankAccountId =
+            DB::table('accounts')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyAId,
+
+                    'account_group_id' =>
+                        $assetGroupId,
+
+                    'code' =>
+                        '1012-CR-CROSS',
+
+                    'name' =>
+                        'Customer Receipt Cross Company Bank',
+
+                    'normal_balance' =>
+                        'DEBIT',
+
+                    'is_header' =>
+                        false,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Snapshot Before Attack
+        |--------------------------------------------------------------------------
+        */
+
+        $receiptCountBefore =
+            DB::table('customer_receipts')
+                ->count();
+
+        $journalCountBefore =
+            DB::table('journals')
+                ->count();
+
+        $arBefore =
+            DB::table('account_receivables')
+                ->where(
+                    'id',
+                    $accountReceivableId
+                )
+                ->first();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Execute Cross-Company Customer Attack
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+            app(\App\Services\CustomerReceiptService::class)
+                ->create(
+                    new \App\DTO\CustomerReceiptDTO(
+                        customerId:
+                            $customerBId,
+
+                        accountReceivableId:
+                            $accountReceivableId,
+
+                        cashBankAccountId:
+                            $bankAccountId,
+
+                        amount:
+                            25000,
+
+                        remarks:
+                            'Must reject foreign customer',
+
+                        createdBy:
+                            $this->data['user_id'],
+                    )
+                );
+
+            $this->fail(
+                'Expected RuntimeException was not thrown.'
+            );
+        } catch (\RuntimeException $e) {
+            $this->assertSame(
+                'Customer does not belong to transaction company.',
+                $e->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Atomicity Assertions
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $receiptCountBefore,
+            DB::table('customer_receipts')
+                ->count()
+        );
+
+        $this->assertSame(
+            $journalCountBefore,
+            DB::table('journals')
+                ->count()
+        );
+
+        $arAfter =
+            DB::table('account_receivables')
+                ->where(
+                    'id',
+                    $accountReceivableId
+                )
+                ->first();
+
+        $this->assertEqualsWithDelta(
+            (float) $arBefore->paid_amount,
+            (float) $arAfter->paid_amount,
+            0.01
+        );
+
+        $this->assertEqualsWithDelta(
+            (float) $arBefore->balance_amount,
+            (float) $arAfter->balance_amount,
+            0.01
+        );
+
+        $this->assertSame(
+            $arBefore->status,
+            $arAfter->status
+        );
+    }
+
     public function test_customer_receipt_rejects_payment_exceeding_receivable_balance(): void
     {
         $assetGroupId =
@@ -1472,6 +1786,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $customerId =
             DB::table('customers')
                 ->insertGetId([
+                    'company_id' =>
+                    $this->data['company_id'],
+
                     'code' =>
                         'CUS-CR-OVER',
                     'name' =>
@@ -1675,6 +1992,8 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $customerId =
             DB::table('customers')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
                     'code' =>
                         'CUS-CR-PAID',
                     'name' =>
@@ -1934,17 +2253,21 @@ class CustomerReceiptClosedLoopTest extends TestCase
 
         /*
         |--------------------------------------------------------------------------
-        | Customer
+        | Customer Company A
         |--------------------------------------------------------------------------
         |
-        | Customers are not company-scoped yet.
-        | Company ownership will be handled in the later Phase H master-data step.
+        | Customer belongs to the same company as the source Sales Invoice.
+        | The cross-company attack in this test comes from the Company B
+        | cash / bank account, not from the customer.
         |
         */
 
         $customerId =
             DB::table('customers')
                 ->insertGetId([
+                    'company_id' =>
+                        $companyAId,
+
                     'code' =>
                         'CUS-CR-X',
 

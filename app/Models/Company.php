@@ -62,4 +62,11 @@ class Company extends Model
             Item::class
         );
     }
+
+    public function customers(): HasMany
+    {
+        return $this->hasMany(
+            Customer::class
+        );
+    }
 }
