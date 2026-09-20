@@ -16,7 +16,13 @@ class ItemController extends Controller
 
     public function index()
     {
-        $items = $this->service->paginate();
+        $companyId =
+            (int) auth()->user()->company_id;
+
+        $items =
+            $this->service->paginate(
+                $companyId
+            );
 
         return view(
             'erp.items.index',
@@ -26,11 +32,25 @@ class ItemController extends Controller
 
     public function create()
     {
+        $companyId =
+            (int) auth()->user()->company_id;
+
         return view(
             'erp.items.create',
             [
-                'categories' => ItemCategory::all(),
-                'uoms'       => Uom::all(),
+                'categories' =>
+                    ItemCategory::query()
+                        ->where(
+                            'company_id',
+                            $companyId
+                        )
+                        ->orderBy('name')
+                        ->get(),
+
+                'uoms' =>
+                    Uom::query()
+                        ->orderBy('name')
+                        ->get(),
             ]
         );
     }
@@ -40,14 +60,15 @@ class ItemController extends Controller
     ) {
 
         $dto = new ItemDTO(
-            itemCategoryId : $request->item_category_id,
-            uomId          : $request->uom_id,
-            code           : $request->code,
-            name           : $request->name,
-            description    : $request->description,
-            minimumStock   : $request->minimum_stock ?? 0,
-            maximumStock   : $request->maximum_stock ?? 0,
-            isActive       : true,
+            companyId       : (int) $request->user()->company_id,
+            itemCategoryId  : (int) $request->item_category_id,
+            uomId           : (int) $request->uom_id,
+            code            : $request->code,
+            name            : $request->name,
+            description     : $request->description,
+            minimumStock    : (float) ($request->minimum_stock ?? 0),
+            maximumStock    : (float) ($request->maximum_stock ?? 0),
+            isActive        : true,
         );
 
         $this->service->create($dto);

@@ -65,6 +65,10 @@ class PaymentVoucherClosedLoopTest extends TestCase
         $liabilityGroupId =
             DB::table('account_groups')
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'code',
                     'LIA-T'
                 )
@@ -101,6 +105,9 @@ class PaymentVoucherClosedLoopTest extends TestCase
         $alternativeApAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $liabilityGroupId,
 
@@ -135,6 +142,9 @@ class PaymentVoucherClosedLoopTest extends TestCase
         $cashBankAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $assetGroupId,
 
@@ -174,6 +184,10 @@ class PaymentVoucherClosedLoopTest extends TestCase
         if (
             !DB::table('accounts')
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'code',
                     '2001'
                 )
@@ -181,6 +195,9 @@ class PaymentVoucherClosedLoopTest extends TestCase
         ) {
             DB::table('accounts')
                 ->insert([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $liabilityGroupId,
 
@@ -502,6 +519,9 @@ class PaymentVoucherClosedLoopTest extends TestCase
         $cashBankAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $assetGroupId,
 
@@ -754,6 +774,9 @@ class PaymentVoucherClosedLoopTest extends TestCase
         $cashBankAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $assetGroupId,
 
@@ -926,6 +949,300 @@ class PaymentVoucherClosedLoopTest extends TestCase
         $this->assertSame(
             (int) $this->data['company_id'],
             (int) $ap->company_id
+        );
+    }
+
+    public function test_payment_voucher_rejects_cash_bank_account_from_another_company(): void
+    {
+        $companyAId =
+            (int) $this->data['company_id'];
+
+        /*
+        |--------------------------------------------------------------------------
+        | Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyBId =
+            DB::table('companies')
+                ->insertGetId([
+                    'code' =>
+                        'PV-COMP-B',
+
+                    'name' =>
+                        'Payment Voucher Company B',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Asset Group Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $assetGroupBId =
+            DB::table('account_groups')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'code' =>
+                        'AST-T',
+
+                    'name' =>
+                        'Asset Test Company B',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Cash / Bank Account Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $cashBankAccountBId =
+            DB::table('accounts')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'account_group_id' =>
+                        $assetGroupBId,
+
+                    'code' =>
+                        '1009-PV-X',
+
+                    'name' =>
+                        'Bank Company B',
+
+                    'normal_balance' =>
+                        'DEBIT',
+
+                    'is_header' =>
+                        false,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Account Payable Company A
+        |--------------------------------------------------------------------------
+        */
+
+        $accountPayableId =
+            DB::table('account_payables')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyAId,
+
+                    'reference_type' =>
+                        'PURCHASE_INVOICE',
+
+                    'reference_id' =>
+                        999101,
+
+                    'supplier_name' =>
+                        'Cross Company Payment Test',
+
+                    'invoice_date' =>
+                        '2026-08-20',
+
+                    'due_date' =>
+                        '2026-09-20',
+
+                    'amount' =>
+                        100000,
+
+                    'paid_amount' =>
+                        0,
+
+                    'balance_amount' =>
+                        100000,
+
+                    'status' =>
+                        'OPEN',
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Before State
+        |--------------------------------------------------------------------------
+        */
+
+        $voucherCountBefore =
+            DB::table('payment_vouchers')
+                ->count();
+
+        $journalCountBefore =
+            DB::table('journals')
+                ->count();
+
+        $journalDetailCountBefore =
+            DB::table('journal_details')
+                ->count();
+
+        $sequenceBefore =
+            (int)
+            DB::table('document_sequences')
+                ->where(
+                    'document_type',
+                    'PV'
+                )
+                ->value(
+                    'current_number'
+                );
+
+        $apBefore =
+            DB::table('account_payables')
+                ->where(
+                    'id',
+                    $accountPayableId
+                )
+                ->first();
+
+        $this->assertNotNull(
+            $apBefore
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Act
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+            app(PaymentVoucherService::class)
+                ->create(
+                    new PaymentVoucherDTO(
+                        accountPayableId:
+                            $accountPayableId,
+
+                        cashBankAccountId:
+                            $cashBankAccountBId,
+
+                        amount:
+                            40000,
+
+                        paymentMethod:
+                            'BANK_TRANSFER',
+
+                        remarks:
+                            'Cross-company cash bank rejection test',
+
+                        createdBy:
+                            $this->data['user_id'],
+                    )
+                );
+
+            $this->fail(
+                'Payment Voucher must reject a cash/bank account from another company.'
+            );
+
+        } catch (\RuntimeException $exception) {
+
+            $this->assertSame(
+                "Cash/bank account does not belong to company {$companyAId}.",
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | No Side Effects
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $voucherCountBefore,
+            DB::table('payment_vouchers')
+                ->count()
+        );
+
+        $this->assertSame(
+            $journalCountBefore,
+            DB::table('journals')
+                ->count()
+        );
+
+        $this->assertSame(
+            $journalDetailCountBefore,
+            DB::table('journal_details')
+                ->count()
+        );
+
+        $sequenceAfter =
+            (int)
+            DB::table('document_sequences')
+                ->where(
+                    'document_type',
+                    'PV'
+                )
+                ->value(
+                    'current_number'
+                );
+
+        $this->assertSame(
+            $sequenceBefore,
+            $sequenceAfter
+        );
+
+        $apAfter =
+            DB::table('account_payables')
+                ->where(
+                    'id',
+                    $accountPayableId
+                )
+                ->first();
+
+        $this->assertNotNull(
+            $apAfter
+        );
+
+        $this->assertEqualsWithDelta(
+            (float) $apBefore->paid_amount,
+            (float) $apAfter->paid_amount,
+            0.01
+        );
+
+        $this->assertEqualsWithDelta(
+            (float) $apBefore->balance_amount,
+            (float) $apAfter->balance_amount,
+            0.01
+        );
+
+        $this->assertSame(
+            $apBefore->status,
+            $apAfter->status
         );
     }
 }

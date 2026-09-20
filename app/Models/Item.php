@@ -11,6 +11,7 @@ class Item extends Model
     use SoftDeletes;
 
     protected $fillable = [
+        'company_id',
         'item_category_id',
         'uom_id',
         'code',
@@ -24,12 +25,28 @@ class Item extends Model
     ];
 
     protected $casts = [
-        'minimum_stock' => 'decimal:4',
-        'maximum_stock' => 'decimal:4',
-        'average_cost' => 'decimal:2',
-        'last_purchase_price' => 'decimal:2',
-        'is_active' => 'boolean',
+        'minimum_stock' =>
+            'decimal:4',
+
+        'maximum_stock' =>
+            'decimal:4',
+
+        'average_cost' =>
+            'decimal:2',
+
+        'last_purchase_price' =>
+            'decimal:2',
+
+        'is_active' =>
+            'boolean',
     ];
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(
+            Company::class
+        );
+    }
 
     public function category(): BelongsTo
     {

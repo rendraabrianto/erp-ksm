@@ -35,16 +35,44 @@ class InventoryAdjustmentClosedLoopTest extends TestCase
         $this->data =
             InventoryReconciliationTestData::create();
 
+        /*
+        |--------------------------------------------------------------------------
+        | Existing Account — Same Company
+        |--------------------------------------------------------------------------
+        |
+        | Account master sekarang company-scoped.
+        | Account group yang dipakai untuk adjustment account harus berasal
+        | dari company fixture yang sama.
+        |
+        */
+
         $existingAccount =
             Account::query()
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->firstOrFail();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Adjustment Gain Account
+        |--------------------------------------------------------------------------
+        */
 
         $gainAccount =
             Account::firstOrCreate(
-                ['code' => '4901'],
+                [
+                    'company_id' =>
+                        $this->data['company_id'],
+
+                    'code' =>
+                        '4901',
+                ],
                 [
                     'account_group_id' =>
-                        $existingAccount->account_group_id,
+                        $existingAccount
+                            ->account_group_id,
 
                     'name' =>
                         'Pendapatan Selisih Persediaan',
@@ -60,12 +88,25 @@ class InventoryAdjustmentClosedLoopTest extends TestCase
                 ]
             );
 
+        /*
+        |--------------------------------------------------------------------------
+        | Adjustment Loss Account
+        |--------------------------------------------------------------------------
+        */
+
         $lossAccount =
             Account::firstOrCreate(
-                ['code' => '6901'],
+                [
+                    'company_id' =>
+                        $this->data['company_id'],
+
+                    'code' =>
+                        '6901',
+                ],
                 [
                     'account_group_id' =>
-                        $existingAccount->account_group_id,
+                        $existingAccount
+                            ->account_group_id,
 
                     'name' =>
                         'Beban Selisih Persediaan',
@@ -81,24 +122,50 @@ class InventoryAdjustmentClosedLoopTest extends TestCase
                 ]
             );
 
+        /*
+        |--------------------------------------------------------------------------
+        | Map Adjustment Accounts To Item Category
+        |--------------------------------------------------------------------------
+        */
+
         $item =
             Item::findOrFail(
                 $this->data['item_id']
             );
 
-        ItemCategory::where(
-            'id',
-            $item->item_category_id
-        )->update([
-            'adjustment_gain_account_id' =>
-                $gainAccount->id,
+        ItemCategory::query()
+            ->where(
+                'id',
+                $item->item_category_id
+            )
+            ->where(
+                'company_id',
+                $this->data['company_id']
+            )
+            ->update([
+                'adjustment_gain_account_id' =>
+                    $gainAccount->id,
 
-            'adjustment_loss_account_id' =>
-                $lossAccount->id,
-        ]);
+                'adjustment_loss_account_id' =>
+                    $lossAccount->id,
+            ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | ADJ Document Sequence
+        |--------------------------------------------------------------------------
+        |
+        | Document Sequence belum company-scoped pada tahap H2.4.
+        | Company isolation untuk sequence akan kita kerjakan pada tahap
+        | Document Sequence berikutnya.
+        |
+        */
 
         DocumentSequence::firstOrCreate(
-            ['document_type' => 'ADJ'],
+            [
+                'document_type' =>
+                    'ADJ',
+            ],
             [
                 'prefix' =>
                     'ADJ',

@@ -14,14 +14,16 @@ use App\Services\InventoryReconciliationAdjustmentService;
 use Illuminate\Http\Request;
 use App\Services\InventoryReconciliationHistoryService;
 use App\Models\InventoryReconciliationHistory;
+use App\Services\AccountingAccountResolverService;
 
 class InventoryReconciliationController extends Controller
 {
     public function __construct(
-    private InventoryHistoricalReconciliationService $historicalService,
-    private InventoryReconciliationAdjustmentService $adjustmentService,
-    private InventoryReconciliationHistoryService $historyService,
-) {}
+        private InventoryHistoricalReconciliationService $historicalService,
+        private InventoryReconciliationAdjustmentService $adjustmentService,
+        private InventoryReconciliationHistoryService $historyService,
+        private AccountingAccountResolverService $accountResolver,
+    ) {}
 
     public function index()
     {
@@ -148,19 +150,17 @@ class InventoryReconciliationController extends Controller
                 );
         }
 
-        $grni = Account::query()
-            ->where('code', '2101')
-            ->where('is_active', true)
-            ->first();
-
-        if (! $grni) {
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'Account GRNI 2101 tidak ditemukan atau tidak aktif.'
+        $warehouse =
+            Warehouse::query()
+                ->findOrFail(
+                    $request->integer('warehouse_id')
                 );
-        }
+
+        $grni =
+            $this->accountResolver
+                ->grni(
+                    (int) $warehouse->company_id
+                );
 
         $dto =
             new InventoryReconciliationAdjustmentDTO(
@@ -219,10 +219,7 @@ class InventoryReconciliationController extends Controller
                 'preview' => $preview,
                 'item' => $item,
 
-                'warehouse' =>
-                    Warehouse::findOrFail(
-                        $request->integer('warehouse_id')
-                    ),
+                'warehouse' => $warehouse,
 
                 'dateFrom' =>
                     $request->string('date_from')->toString(),
@@ -260,19 +257,17 @@ class InventoryReconciliationController extends Controller
                 );
         }
 
-        $grni = Account::query()
-            ->where('code', '2101')
-            ->where('is_active', true)
-            ->first();
-
-        if (! $grni) {
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'Account GRNI 2101 tidak ditemukan atau tidak aktif.'
+        $warehouse =
+            Warehouse::query()
+                ->findOrFail(
+                    $request->integer('warehouse_id')
                 );
-        }
+
+        $grni =
+            $this->accountResolver
+                ->grni(
+                    (int) $warehouse->company_id
+                );
 
         $dto = new InventoryReconciliationAdjustmentDTO(
             warehouseId:

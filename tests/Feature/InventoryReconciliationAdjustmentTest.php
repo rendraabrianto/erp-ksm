@@ -694,4 +694,205 @@ class InventoryReconciliationAdjustmentTest extends TestCase
             );
         }
     }
+
+    public function test_apply_rejects_reconciliation_account_from_another_company():
+        void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | DATABASE STATE BEFORE APPLY
+        |--------------------------------------------------------------------------
+        */
+
+        $journalCountBefore =
+            Journal::count();
+
+        $journalDetailCountBefore =
+            DB::table('journal_details')
+                ->count();
+
+        $sequenceBefore =
+            (int)
+            DB::table('document_sequences')
+                ->where(
+                    'document_type',
+                    'JV'
+                )
+                ->value(
+                    'current_number'
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | COMPANY B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyBId =
+            DB::table('companies')
+                ->insertGetId([
+                    'code' => 'TEST-B',
+                    'name' => 'Test Company B',
+                    'is_active' => true,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | LIABILITY GROUP B
+        |--------------------------------------------------------------------------
+        */
+
+        $expenseGroupBId =
+            DB::table('account_groups')
+                ->insertGetId([
+                    'company_id' => $companyBId,
+                    'code' => 'EXP-T',
+                    'name' => 'Expense Test Company B',
+                    'is_active' => true,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | GRNI ACCOUNT B
+        |--------------------------------------------------------------------------
+        */
+
+        $cogsAccountBId =
+            DB::table('accounts')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'account_group_id' =>
+                        $expenseGroupBId,
+
+                    'code' =>
+                        '5001-T',
+
+                    'name' =>
+                        'HPP Test Company B',
+
+                    'normal_balance' =>
+                        'DEBIT',
+
+                    'is_header' =>
+                        false,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | CROSS-COMPANY DTO
+        |--------------------------------------------------------------------------
+        |
+        | Warehouse, item, inventory account dan HPP tetap Company A.
+        |
+        | Hanya GRNI yang sengaja diarahkan ke Company B.
+        |
+        */
+
+        $crossCompanyDto =
+            new InventoryReconciliationAdjustmentDTO(
+                warehouseId:
+                    $this->data['warehouse_id'],
+
+                itemId:
+                    $this->data['item_id'],
+
+                dateFrom:
+                    '2026-08-01',
+
+                dateTo:
+                    '2026-08-31',
+
+                inventoryAccountId:
+                    $this->data[
+                        'inventory_account_id'
+                    ],
+
+                cogsAccountId:
+                    $cogsAccountBId,
+
+                grniAccountId:
+                    $this->data[
+                        'grni_account_id'
+                    ],
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | APPLY MUST REJECT CROSS-COMPANY ACCOUNT
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+
+            $this->service()->apply(
+                $crossCompanyDto,
+                $this->data['user_id']
+            );
+
+            $this->fail(
+                'Expected reconciliation apply to reject cross-company account.'
+            );
+
+        } catch (\RuntimeException $exception) {
+
+            $this->assertSame(
+                'One or more reconciliation accounts do not belong to the warehouse company.',
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | NO JOURNAL SIDE EFFECT
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $journalCountBefore,
+            Journal::count()
+        );
+
+        $this->assertSame(
+            $journalDetailCountBefore,
+            DB::table('journal_details')
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | DOCUMENT SEQUENCE MUST NOT MOVE
+        |--------------------------------------------------------------------------
+        */
+
+        $sequenceAfter =
+            (int)
+            DB::table('document_sequences')
+                ->where(
+                    'document_type',
+                    'JV'
+                )
+                ->value(
+                    'current_number'
+                );
+
+        $this->assertSame(
+            $sequenceBefore,
+            $sequenceAfter
+        );
+    }
 }

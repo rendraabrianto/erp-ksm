@@ -3,15 +3,16 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Account extends Model
 {
     use SoftDeletes;
 
     protected $fillable = [
+        'company_id',
         'account_group_id',
         'code',
         'name',
@@ -24,6 +25,11 @@ class Account extends Model
         'is_header' => 'boolean',
         'is_active' => 'boolean',
     ];
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
 
     public function group(): BelongsTo
     {

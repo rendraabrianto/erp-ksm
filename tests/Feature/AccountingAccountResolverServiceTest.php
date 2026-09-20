@@ -8,6 +8,8 @@ use App\Services\AccountingAccountResolverService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Support\InventoryReconciliationTestData;
 use Tests\TestCase;
+use Illuminate\Support\Facades\DB;
+
 
 class AccountingAccountResolverServiceTest extends TestCase
 {
@@ -135,6 +137,114 @@ class AccountingAccountResolverServiceTest extends TestCase
         $this->expectExceptionMessage(
             sprintf(
                 'Accounting account mapping is not configured for company %d.',
+                $this->data['company_id']
+            )
+        );
+
+        $this->service->grni(
+            $this->data['company_id']
+        );
+    }
+    
+    public function test_it_rejects_control_account_from_another_company(): void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyBId =
+            DB::table('companies')
+                ->insertGetId([
+                    'code' => 'TEST-B',
+                    'name' => 'Test Company B',
+                    'is_active' => true,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Liability Group B
+        |--------------------------------------------------------------------------
+        */
+
+        $liabilityGroupBId =
+            DB::table('account_groups')
+                ->insertGetId([
+                    'company_id' => $companyBId,
+                    'code' => 'LIA-T',
+                    'name' => 'Liability Test Company B',
+                    'is_active' => true,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | GRNI Account B
+        |--------------------------------------------------------------------------
+        |
+        | Same accounting code is intentional.
+        |
+        | H2.1 changed account uniqueness from global code to:
+        |
+        |     company_id + code
+        |
+        | so Company A and Company B may legitimately use the same code.
+        |
+        */
+
+        $grniAccountBId =
+            DB::table('accounts')
+                ->insertGetId([
+                    'company_id' => $companyBId,
+                    'account_group_id' =>
+                        $liabilityGroupBId,
+                    'code' => '2101',
+                    'name' => 'GRNI Company B',
+                    'normal_balance' => 'CREDIT',
+                    'is_header' => false,
+                    'is_active' => true,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Corrupt Company A Mapping
+        |--------------------------------------------------------------------------
+        |
+        | Simulate an invalid cross-company mapping:
+        |
+        | Company A mapping -> Company B GRNI account.
+        |
+        */
+
+        AccountingAccountMapping::query()
+            ->where(
+                'company_id',
+                $this->data['company_id']
+            )
+            ->update([
+                'grni_account_id' =>
+                    $grniAccountBId,
+            ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Resolver Must Reject It
+        |--------------------------------------------------------------------------
+        */
+
+        $this->expectException(
+            \RuntimeException::class
+        );
+
+        $this->expectExceptionMessage(
+            sprintf(
+                'GRNI account does not belong to company %d.',
                 $this->data['company_id']
             )
         );

@@ -9,28 +9,44 @@ class ItemRepository
 implements ItemRepositoryInterface
 {
     public function paginate(
+        int $companyId,
         int $perPage = 10
-    )
-    {
-        return Item::with([
-            'category',
-            'uom'
-        ])
-        ->latest()
-        ->paginate($perPage);
+    ) {
+        return Item::query()
+            ->where(
+                'company_id',
+                $companyId
+            )
+            ->with([
+                'category',
+                'uom',
+            ])
+            ->latest()
+            ->paginate(
+                $perPage
+            );
     }
 
     public function create(
         array $data
-    ): Item
-    {
-        return Item::create($data);
+    ): Item {
+        return Item::create(
+            $data
+        );
     }
 
     public function find(
-        int $id
-    ): ?Item
-    {
-        return Item::find($id);
+        int $id,
+        int $companyId
+    ): ?Item {
+        return Item::query()
+            ->where(
+                'company_id',
+                $companyId
+            )
+            ->whereKey(
+                $id
+            )
+            ->first();
     }
 }

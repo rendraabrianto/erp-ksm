@@ -15,6 +15,7 @@ class PaymentVoucherService
         private AutoJournalService $autoJournalService,
         private AuditLogService $auditService,
         private CompanyGuardService $companyGuardService,
+        private AccountingAccountResolverService $accountResolver,
     ) {}
 
     public function create(
@@ -61,6 +62,24 @@ class PaymentVoucherService
                     ->assertActorBelongsToCompany(
                         $dto->createdBy,
                         $companyId
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | Cash / Bank Account Company Guard
+                |--------------------------------------------------------------------------
+                |
+                | Selected payment account must belong to the same company as the AP.
+                | Validate before sequence generation, voucher creation, AP mutation,
+                | and journal posting.
+                |
+                */
+
+                $this->accountResolver
+                    ->accountForCompany(
+                        $dto->cashBankAccountId,
+                        $companyId,
+                        'Cash/bank account'
                     );
 
                 /*

@@ -84,26 +84,32 @@ class InventoryTransactionService
                 |
                 */
 
-                Item::query()
-                    ->lockForUpdate()
-                    ->findOrFail(
-                        $dto->itemId
-                    );
+                $item =
+                    Item::query()
+                        ->lockForUpdate()
+                        ->findOrFail(
+                            $dto->itemId
+                        );
 
                 /*
                 |--------------------------------------------------------------------------
-                | Backdated Transaction Guard
+                | Item Company Ownership Guard
                 |--------------------------------------------------------------------------
                 |
-                | Moving-average inventory saat ini belum mendukung automatic
-                | historical recost/rebuild.
-                |
-                | Karena itu transaksi tidak boleh dimasukkan sebelum tanggal
-                | transaksi terakhir untuk kombinasi warehouse + item.
-                |
-                | Transaksi pada tanggal yang sama tetap diperbolehkan.
+                | Warehouse menentukan company ownership transaksi inventory.
+                | Item wajib dimiliki company yang sama.
                 |
                 */
+
+                if (
+                    (int) $item->company_id
+                    !==
+                    $companyId
+                ) {
+                    throw new \RuntimeException(
+                        'Item does not belong to transaction company.'
+                    );
+                }
 
                 $latestTransactionDate =
                     $this

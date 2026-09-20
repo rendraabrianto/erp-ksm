@@ -7,6 +7,7 @@ use App\Models\Item;
 interface ItemRepositoryInterface
 {
     public function paginate(
+        int $companyId,
         int $perPage = 10
     );
 
@@ -15,6 +16,7 @@ interface ItemRepositoryInterface
     ): Item;
 
     public function find(
-        int $id
+        int $id,
+        int $companyId
     ): ?Item;
 }

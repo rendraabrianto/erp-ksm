@@ -66,6 +66,10 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $assetGroupId =
             DB::table('account_groups')
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'code',
                     'AST-T'
                 )
@@ -78,6 +82,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $revenueGroupId =
             DB::table('account_groups')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'code' =>
                         'REV-SI',
 
@@ -103,6 +110,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $alternativeArAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $assetGroupId,
 
@@ -141,6 +151,10 @@ class SalesInvoiceClosedLoopTest extends TestCase
         if (
             !DB::table('accounts')
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'code',
                     '1101'
                 )
@@ -148,6 +162,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         ) {
             DB::table('accounts')
                 ->insert([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $assetGroupId,
 
@@ -183,6 +200,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $salesAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $revenueGroupId,
 
@@ -659,6 +679,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $revenueGroupId =
             DB::table('account_groups')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'code' =>
                         'REV-SI-ML',
 
@@ -684,6 +707,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $salesAccountAId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+                    
                     'account_group_id' =>
                         $revenueGroupId,
 
@@ -712,6 +738,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $salesAccountBId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $revenueGroupId,
 
@@ -777,6 +806,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $categoryBId =
             DB::table('item_categories')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'code' =>
                         'CAT-SI-B',
 
@@ -808,6 +840,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $itemBId =
             DB::table('items')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'item_category_id' =>
                         $categoryBId,
 
@@ -1262,6 +1297,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $revenueGroupId =
             DB::table('account_groups')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+                    
                     'code' =>
                         'REV-SI-RB',
 
@@ -1287,6 +1325,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         $salesAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $revenueGroupId,
 
@@ -1675,6 +1716,507 @@ class SalesInvoiceClosedLoopTest extends TestCase
         /*
         |--------------------------------------------------------------------------
         | No AR Created
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertFalse(
+            DB::table('account_receivables')
+                ->where(
+                    'customer_id',
+                    $customerId
+                )
+                ->exists()
+        );
+    }
+
+    public function test_sales_invoice_rejects_sales_account_from_another_company(): void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Company A Context
+        |--------------------------------------------------------------------------
+        */
+
+        $companyAId =
+            (int) $this->data['company_id'];
+
+        $item =
+            DB::table('items')
+                ->where(
+                    'id',
+                    $this->data['item_id']
+                )
+                ->first();
+
+        $this->assertNotNull(
+            $item
+        );
+
+        $category =
+            DB::table('item_categories')
+                ->where(
+                    'id',
+                    $item->item_category_id
+                )
+                ->first();
+
+        $this->assertNotNull(
+            $category
+        );
+
+        $this->assertSame(
+            $companyAId,
+            (int) $category->company_id
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Create Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyBId =
+            DB::table('companies')
+                ->insertGetId([
+                    'code' =>
+                        'COMP-SI-B',
+
+                    'name' =>
+                        'Company B Sales Invoice Attack',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        $this->assertNotSame(
+            $companyAId,
+            (int) $companyBId
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Company B Revenue Group
+        |--------------------------------------------------------------------------
+        */
+
+        $revenueGroupBId =
+            DB::table('account_groups')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'code' =>
+                        'REV-SIB',
+
+                    'name' =>
+                        'Revenue Company B Sales Invoice Attack',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Company B Sales Account
+        |--------------------------------------------------------------------------
+        */
+
+        $salesAccountBId =
+            DB::table('accounts')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'account_group_id' =>
+                        $revenueGroupBId,
+
+                    'code' =>
+                        '4198-SIB',
+
+                    'name' =>
+                        'Sales Revenue Company B Attack',
+
+                    'normal_balance' =>
+                        'CREDIT',
+
+                    'is_header' =>
+                        false,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Poison Company A Item Category
+        |--------------------------------------------------------------------------
+        |
+        | Category tetap milik Company A.
+        | sales_account_id sengaja diarahkan ke account Company B.
+        |
+        */
+
+        DB::table('item_categories')
+            ->where(
+                'id',
+                $item->item_category_id
+            )
+            ->update([
+                'sales_account_id' =>
+                    $salesAccountBId,
+
+                'updated_at' =>
+                    now(),
+            ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Customer
+        |--------------------------------------------------------------------------
+        |
+        | Customer belum company-scoped pada H2.4.
+        | Company isolation Customer akan ditangani pada tahap berikutnya.
+        |
+        */
+
+        $customerId =
+            DB::table('customers')
+                ->insertGetId([
+                    'code' =>
+                        'CUS-SI-ATTACK',
+
+                    'name' =>
+                        'Customer Sales Invoice Attack',
+
+                    'credit_limit' =>
+                        1000000,
+
+                    'credit_days' =>
+                        30,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Sales Order — Company A
+        |--------------------------------------------------------------------------
+        */
+
+        $salesOrderId =
+            DB::table('sales_orders')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyAId,
+
+                    'so_no' =>
+                        'SO-SI-ATTACK',
+
+                    'customer_id' =>
+                        $customerId,
+
+                    'order_date' =>
+                        '2026-08-08',
+
+                    'delivery_date' =>
+                        '2026-08-08',
+
+                    'status' =>
+                        'COMPLETED',
+
+                    'remarks' =>
+                        'Sales Invoice cross-company attack SO',
+
+                    'created_by' =>
+                        $this->data['user_id'],
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        $salesOrderDetailId =
+            DB::table('sales_order_details')
+                ->insertGetId([
+                    'sales_order_id' =>
+                        $salesOrderId,
+
+                    'item_id' =>
+                        $this->data['item_id'],
+
+                    'qty' =>
+                        10,
+
+                    'unit_price' =>
+                        8000,
+
+                    'discount' =>
+                        0,
+
+                    'delivered_qty' =>
+                        10,
+
+                    'remarks' =>
+                        'Sales Invoice attack SO detail',
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Delivery Order — Company A
+        |--------------------------------------------------------------------------
+        */
+
+        $deliveryOrderId =
+            DB::table('delivery_orders')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyAId,
+
+                    'do_no' =>
+                        'DO-SI-ATTACK',
+
+                    'sales_order_id' =>
+                        $salesOrderId,
+
+                    'delivery_date' =>
+                        '2026-08-08',
+
+                    'status' =>
+                        'POSTED',
+
+                    'remarks' =>
+                        'Sales Invoice cross-company attack DO',
+
+                    'created_by' =>
+                        $this->data['user_id'],
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        DB::table('delivery_order_details')
+            ->insert([
+                'delivery_order_id' =>
+                    $deliveryOrderId,
+
+                'sales_order_detail_id' =>
+                    $salesOrderDetailId,
+
+                'item_id' =>
+                    $this->data['item_id'],
+
+                'qty' =>
+                    10,
+
+                'unit_cost' =>
+                    6000,
+
+                'remarks' =>
+                    'Sales Invoice attack DO detail',
+
+                'created_at' =>
+                    now(),
+
+                'updated_at' =>
+                    now(),
+            ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Capture State Before Attack
+        |--------------------------------------------------------------------------
+        */
+
+        $invoiceCountBefore =
+            DB::table('sales_invoices')
+                ->count();
+
+        $invoiceDetailCountBefore =
+            DB::table('sales_invoice_details')
+                ->count();
+
+        $receivableCountBefore =
+            DB::table('account_receivables')
+                ->count();
+
+        $journalCountBefore =
+            DB::table('journals')
+                ->count();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Execute Attack
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+
+            app(SalesInvoiceService::class)
+                ->create(
+                    new SalesInvoiceDTO(
+                        customerId:
+                            $customerId,
+
+                        deliveryOrderId:
+                            $deliveryOrderId,
+
+                        dueDate:
+                            '2026-09-08',
+
+                        remarks:
+                            'Cross-company sales account attack',
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        lines: [
+                            new SalesInvoiceLineDTO(
+                                itemId:
+                                    $this->data['item_id'],
+
+                                qty:
+                                    10,
+
+                                unitPrice:
+                                    8000,
+
+                                discount:
+                                    0,
+
+                                remarks:
+                                    'Cross-company sales account attack',
+                            ),
+                        ],
+                    )
+                );
+
+            $this->fail(
+                'Sales Invoice must reject a sales account from another company.'
+            );
+
+        } catch (\RuntimeException $exception) {
+
+            $this->assertSame(
+                sprintf(
+                    'Sales account does not belong to company %d.',
+                    $companyAId
+                ),
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Invoice Must Roll Back
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $invoiceCountBefore,
+            DB::table('sales_invoices')
+                ->count()
+        );
+
+        $this->assertSame(
+            $invoiceDetailCountBefore,
+            DB::table('sales_invoice_details')
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | No Account Receivable
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $receivableCountBefore,
+            DB::table('account_receivables')
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | No Journal
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $journalCountBefore,
+            DB::table('journals')
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Delivery Order Must Remain POSTED
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            'POSTED',
+            DB::table('delivery_orders')
+                ->where(
+                    'id',
+                    $deliveryOrderId
+                )
+                ->value('status')
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | No Invoice Survived For Delivery Order
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertFalse(
+            DB::table('sales_invoices')
+                ->where(
+                    'delivery_order_id',
+                    $deliveryOrderId
+                )
+                ->exists()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | No Receivable Survived For Customer
         |--------------------------------------------------------------------------
         */
 

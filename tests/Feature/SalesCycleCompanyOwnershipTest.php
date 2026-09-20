@@ -6,23 +6,25 @@ use App\DTO\DeliveryOrderDTO;
 use App\DTO\DeliveryOrderLineDTO;
 use App\DTO\SalesOrderDTO;
 use App\DTO\SalesOrderLineDTO;
+use App\DTO\SalesInvoiceDTO;
+use App\DTO\SalesInvoiceLineDTO;
 use App\Models\Branch;
 use App\Models\Company;
 use App\Models\SalesOrder;
 use App\Models\User;
-use App\Services\DeliveryOrderService;
-use App\Services\SalesOrderService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
-use RuntimeException;
-use Tests\Support\InventoryReconciliationTestData;
-use Tests\TestCase;
 use App\Models\Account;
 use App\Models\Item;
-use App\DTO\SalesInvoiceDTO;
-use App\DTO\SalesInvoiceLineDTO;
 use App\Models\DeliveryOrder;
+use App\Models\ItemCategory;
+use App\Services\DeliveryOrderService;
+use App\Services\SalesOrderService;
 use App\Services\SalesInvoiceService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Tests\Support\InventoryReconciliationTestData;
+use Tests\TestCase;
+use RuntimeException;
+
 
 class SalesCycleCompanyOwnershipTest extends TestCase
 {
@@ -474,19 +476,41 @@ class SalesCycleCompanyOwnershipTest extends TestCase
         $revenueGroupId =
             DB::table('account_groups')
                 ->insertGetId([
-                    'code' => 'REV-T',
-                    'name' => 'Revenue SI Guard Test',
-                    'created_at' => now(),
-                    'updated_at' => now(),
+                    'company_id' =>
+                        $this->data['company_id'],
+
+                    'code' =>
+                        'REV-T',
+
+                    'name' =>
+                        'Revenue SI Guard Test',
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
                 ]);
 
         $salesAccount =
             Account::create([
-                'code' => '4098',
-                'name' => 'Sales Revenue SI Guard Test',
-                'account_group_id' => $revenueGroupId,
-                'is_header' => false,
-                'is_active' => true,
+                'company_id' =>
+                    $this->data['company_id'],
+
+                'code' =>
+                    '4098',
+
+                'name' =>
+                    'Sales Revenue SI Guard Test',
+
+                'account_group_id' =>
+                    $revenueGroupId,
+
+                'is_header' =>
+                    false,
+
+                'is_active' =>
+                    true,
             ]);
 
         $item =
@@ -1033,6 +1057,9 @@ class SalesCycleCompanyOwnershipTest extends TestCase
         $bankAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $assetGroupId,
 
@@ -1164,6 +1191,311 @@ class SalesCycleCompanyOwnershipTest extends TestCase
         $this->assertSame(
             $arBefore->status,
             $arAfter->status
+        );
+    }
+
+    public function test_sales_order_rejects_item_from_another_company():
+        void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Arrange - Company A Context
+        |--------------------------------------------------------------------------
+        */
+
+        $itemA =
+            Item::query()
+                ->findOrFail(
+                    $this->data['item_id']
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Arrange - Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyB =
+            Company::query()
+                ->create([
+                    'code' =>
+                        'COMP-SO-B',
+
+                    'name' =>
+                        'Sales Order Company B',
+
+                    'phone' =>
+                        null,
+
+                    'email' =>
+                        null,
+
+                    'address' =>
+                        null,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        $categoryB =
+            ItemCategory::query()
+                ->create([
+                    'company_id' =>
+                        $companyB->id,
+
+                    'code' =>
+                        'CAT-SO-B',
+
+                    'name' =>
+                        'Sales Order Category B',
+
+                    'description' =>
+                        'Cross-company SO item attack',
+
+                    'inventory_account_id' =>
+                        null,
+
+                    'cogs_account_id' =>
+                        null,
+
+                    'sales_account_id' =>
+                        null,
+
+                    'adjustment_gain_account_id' =>
+                        null,
+
+                    'adjustment_loss_account_id' =>
+                        null,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        $itemB =
+            Item::query()
+                ->create([
+                    'company_id' =>
+                        $companyB->id,
+
+                    'item_category_id' =>
+                        $categoryB->id,
+
+                    'uom_id' =>
+                        $itemA->uom_id,
+
+                    'code' =>
+                        'ITEM-SO-B',
+
+                    'name' =>
+                        'Sales Order Item Company B',
+
+                    'description' =>
+                        'Must not enter Company A sales order',
+
+                    'minimum_stock' =>
+                        0,
+
+                    'maximum_stock' =>
+                        0,
+
+                    'average_cost' =>
+                        0,
+
+                    'last_purchase_price' =>
+                        0,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Snapshot Before Attack
+        |--------------------------------------------------------------------------
+        */
+
+        $salesOrderCountBefore =
+            DB::table(
+                'sales_orders'
+            )->count();
+
+        $salesOrderDetailCountBefore =
+            DB::table(
+                'sales_order_details'
+            )->count();
+
+        $auditLogCountBefore =
+            DB::table(
+                'audit_logs'
+            )->count();
+
+        $sequenceBefore =
+            DB::table(
+                'document_sequences'
+            )
+                ->where(
+                    'document_type',
+                    'SO'
+                )
+                ->value(
+                    'current_number'
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Execute Attack
+        |--------------------------------------------------------------------------
+        |
+        | Customer fixture belum menjadi bagian dari test fixture,
+        | sehingga mengikuti pola existing Sales Order test.
+        |
+        */
+
+        DB::statement(
+            'SET FOREIGN_KEY_CHECKS=0'
+        );
+
+        try {
+
+            try {
+
+                app(SalesOrderService::class)
+                    ->create(
+                        new SalesOrderDTO(
+                            customerId:
+                                999999,
+
+                            deliveryDate:
+                                '2026-08-08',
+
+                            remarks:
+                                'Cross-company SO item attack',
+
+                            createdBy:
+                                $this->data['user_id'],
+
+                            lines: [
+                                new SalesOrderLineDTO(
+                                    itemId:
+                                        $itemB->id,
+
+                                    qty:
+                                        10,
+
+                                    unitPrice:
+                                        10000,
+
+                                    discount:
+                                        0,
+
+                                    remarks:
+                                        'Foreign company item',
+                                ),
+                            ],
+                        )
+                    );
+
+                $this->fail(
+                    'Sales Order must reject an item from another company.'
+                );
+
+            } catch (RuntimeException $exception) {
+
+                $this->assertSame(
+                    'Item does not belong to transaction company.',
+                    $exception->getMessage()
+                );
+            }
+
+        } finally {
+
+            DB::statement(
+                'SET FOREIGN_KEY_CHECKS=1'
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Attack Setup
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            (int) $this->data['company_id'],
+            (int) DB::table('users')
+                ->where(
+                    'id',
+                    $this->data['user_id']
+                )
+                ->value(
+                    'company_id'
+                )
+        );
+
+        $this->assertNotSame(
+            (int) $this->data['company_id'],
+            (int) $itemB->company_id
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Full Transaction Rollback
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $salesOrderCountBefore,
+            DB::table(
+                'sales_orders'
+            )->count()
+        );
+
+        $this->assertSame(
+            $salesOrderDetailCountBefore,
+            DB::table(
+                'sales_order_details'
+            )->count()
+        );
+
+        $this->assertSame(
+            $auditLogCountBefore,
+            DB::table(
+                'audit_logs'
+            )->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - SO Sequence Rolled Back
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $sequenceBefore,
+            DB::table(
+                'document_sequences'
+            )
+                ->where(
+                    'document_type',
+                    'SO'
+                )
+                ->value(
+                    'current_number'
+                )
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Foreign Item Never Reaches SO Detail
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertDatabaseMissing(
+            'sales_order_details',
+            [
+                'item_id' =>
+                    $itemB->id,
+            ]
         );
     }
 }

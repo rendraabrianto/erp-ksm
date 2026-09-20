@@ -12,6 +12,10 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use RuntimeException;
 use Tests\Support\InventoryReconciliationTestData;
 use Tests\TestCase;
+use App\Models\Company;
+use App\Models\InventoryTransferDetail;
+use App\Models\Item;
+use App\Models\ItemCategory;
 
 class InventoryTransferServiceTest extends TestCase
 {
@@ -1445,6 +1449,248 @@ class InventoryTransferServiceTest extends TestCase
         $this->assertEquals(
             $detailTotalCostBefore,
             (float) $detailAfter->total_cost
+        );
+    }
+
+    public function test_transfer_rejects_item_from_another_company():
+        void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Arrange - Company A Item
+        |--------------------------------------------------------------------------
+        */
+
+        $itemA =
+            Item::query()
+                ->findOrFail(
+                    $this->data['item_id']
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Arrange - Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyB =
+            Company::query()
+                ->create([
+                    'code' =>
+                        'COMP-TRF-B',
+
+                    'name' =>
+                        'Transfer Company B',
+
+                    'phone' =>
+                        null,
+
+                    'email' =>
+                        null,
+
+                    'address' =>
+                        null,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        $categoryB =
+            ItemCategory::query()
+                ->create([
+                    'company_id' =>
+                        $companyB->id,
+
+                    'code' =>
+                        'CAT-TRF-B',
+
+                    'name' =>
+                        'Transfer Category B',
+
+                    'description' =>
+                        'Cross-company transfer attack test',
+
+                    'inventory_account_id' =>
+                        null,
+
+                    'cogs_account_id' =>
+                        null,
+
+                    'sales_account_id' =>
+                        null,
+
+                    'adjustment_gain_account_id' =>
+                        null,
+
+                    'adjustment_loss_account_id' =>
+                        null,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        $itemB =
+            Item::query()
+                ->create([
+                    'company_id' =>
+                        $companyB->id,
+
+                    'item_category_id' =>
+                        $categoryB->id,
+
+                    'uom_id' =>
+                        $itemA->uom_id,
+
+                    'code' =>
+                        'ITEM-TRF-B',
+
+                    'name' =>
+                        'Transfer Item Company B',
+
+                    'description' =>
+                        'Must not enter Company A transfer',
+
+                    'minimum_stock' =>
+                        0,
+
+                    'maximum_stock' =>
+                        0,
+
+                    'average_cost' =>
+                        0,
+
+                    'last_purchase_price' =>
+                        0,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Snapshot Before Attack
+        |--------------------------------------------------------------------------
+        */
+
+        $transferCountBefore =
+            InventoryTransfer::query()
+                ->count();
+
+        $detailCountBefore =
+            InventoryTransferDetail::query()
+                ->count();
+
+        $ledgerCountBefore =
+            StockLedger::query()
+                ->count();
+
+        $sequenceBefore =
+            DocumentSequence::query()
+                ->where(
+                    'document_type',
+                    'TRF'
+                )
+                ->value(
+                    'current_number'
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Act
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+            $this->service->create(
+                $this->dto(
+                    details: [
+                        [
+                            'item_id' =>
+                                $itemB->id,
+
+                            'qty' =>
+                                1,
+
+                            'remarks' =>
+                                'Cross-company item attack',
+                        ],
+                    ]
+                )
+            );
+
+            $this->fail(
+                'Expected cross-company transfer item to be rejected.'
+            );
+        } catch (RuntimeException $exception) {
+            $this->assertSame(
+                'Item does not belong to transaction company.',
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Ownership
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            (int) $this->data['company_id'],
+            (int) $this->sourceWarehouse->company_id
+        );
+
+        $this->assertSame(
+            (int) $this->data['company_id'],
+            (int) $this->destinationWarehouse->company_id
+        );
+
+        $this->assertNotSame(
+            (int) $this->data['company_id'],
+            (int) $itemB->company_id
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Full Rollback
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $transferCountBefore,
+            InventoryTransfer::query()
+                ->count()
+        );
+
+        $this->assertSame(
+            $detailCountBefore,
+            InventoryTransferDetail::query()
+                ->count()
+        );
+
+        $this->assertSame(
+            $ledgerCountBefore,
+            StockLedger::query()
+                ->count()
+        );
+
+        $this->assertSame(
+            $sequenceBefore,
+            DocumentSequence::query()
+                ->where(
+                    'document_type',
+                    'TRF'
+                )
+                ->value(
+                    'current_number'
+                )
+        );
+
+        $this->assertDatabaseMissing(
+            'inventory_transfer_details',
+            [
+                'item_id' =>
+                    $itemB->id,
+            ]
         );
     }
 }

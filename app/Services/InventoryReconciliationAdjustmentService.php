@@ -306,6 +306,20 @@ class InventoryReconciliationAdjustmentService
                     );
                 }
 
+                $crossCompanyAccounts =
+                    $accounts->filter(
+                        fn (Account $account) =>
+                            (int) $account->company_id
+                            !==
+                            $companyId
+                    );
+
+                if ($crossCompanyAccounts->isNotEmpty()) {
+                    throw new \RuntimeException(
+                        'One or more reconciliation accounts do not belong to the warehouse company.'
+                    );
+                }
+
                 $postedJournals = [];
 
                 /*

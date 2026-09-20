@@ -215,6 +215,27 @@ class InventoryTransferService
 
                     /*
                     |--------------------------------------------------------------------------
+                    | Item Company Ownership Guard
+                    |--------------------------------------------------------------------------
+                    |
+                    | Source warehouse menentukan authoritative company ownership transfer.
+                    | Destination warehouse sudah divalidasi berada pada company yang sama.
+                    | Item wajib dimiliki company transfer tersebut.
+                    |
+                    */
+
+                    if (
+                        (int) $item->company_id
+                        !==
+                        $companyId
+                    ) {
+                        throw new RuntimeException(
+                            'Item does not belong to transaction company.'
+                        );
+                    }
+
+                    /*
+                    |--------------------------------------------------------------------------
                     | Current Source Quantity
                     |--------------------------------------------------------------------------
                     */

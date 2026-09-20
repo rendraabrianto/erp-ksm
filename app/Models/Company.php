@@ -31,10 +31,35 @@ class Company extends Model
     {
         return $this->hasMany(User::class);
     }
+
+    public function accountGroups(): HasMany
+    {
+        return $this->hasMany(AccountGroup::class);
+    }
+
+    public function accounts(): HasMany
+    {
+        return $this->hasMany(Account::class);
+    }
+
     public function accountingAccountMapping(): HasOne
     {
         return $this->hasOne(
             AccountingAccountMapping::class
+        );
+    }
+    
+    public function itemCategories(): HasMany
+    {
+        return $this->hasMany(
+            ItemCategory::class
+        );
+    }
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(
+            Item::class
         );
     }
 }

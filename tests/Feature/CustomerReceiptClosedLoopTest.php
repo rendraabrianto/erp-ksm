@@ -77,6 +77,10 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $assetGroupId =
             DB::table('account_groups')
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'code',
                     'AST-T'
                 )
@@ -100,6 +104,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $alternativeArAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+                    
                     'account_group_id' =>
                         $assetGroupId,
 
@@ -134,6 +141,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $bankAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $assetGroupId,
 
@@ -175,10 +185,16 @@ class CustomerReceiptClosedLoopTest extends TestCase
         DB::table('accounts')
             ->updateOrInsert(
                 [
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'code' =>
                         '1101',
                 ],
                 [
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $assetGroupId,
 
@@ -573,6 +589,10 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $assetGroupId =
             DB::table('account_groups')
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'code',
                     'AST-T'
                 )
@@ -593,6 +613,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $bankAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $assetGroupId,
 
@@ -923,6 +946,10 @@ class CustomerReceiptClosedLoopTest extends TestCase
     {
         $assetGroupId =
             DB::table('account_groups')
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->where('code', 'AST-T')
                 ->value('id');
 
@@ -933,6 +960,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $bankAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+                
                     'account_group_id' =>
                         $assetGroupId,
 
@@ -1149,6 +1179,10 @@ class CustomerReceiptClosedLoopTest extends TestCase
     {
         $assetGroupId =
             DB::table('account_groups')
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->where('code', 'AST-T')
                 ->value('id');
 
@@ -1159,6 +1193,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $bankAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $assetGroupId,
 
@@ -1397,6 +1434,10 @@ class CustomerReceiptClosedLoopTest extends TestCase
     {
         $assetGroupId =
             DB::table('account_groups')
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->where('code', 'AST-T')
                 ->value('id');
 
@@ -1407,6 +1448,9 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $bankAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $assetGroupId,
                     'code' =>
@@ -1594,6 +1638,10 @@ class CustomerReceiptClosedLoopTest extends TestCase
     {
         $assetGroupId =
             DB::table('account_groups')
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->where('code', 'AST-T')
                 ->value('id');
 
@@ -1604,6 +1652,8 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $bankAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],                
                     'account_group_id' =>
                         $assetGroupId,
                     'code' =>
@@ -1784,6 +1834,409 @@ class CustomerReceiptClosedLoopTest extends TestCase
                     $accountReceivableId
                 )
                 ->exists()
+        );
+    }
+
+    public function test_customer_receipt_rejects_cash_bank_account_from_another_company(): void
+    {
+        $companyAId =
+            (int) $this->data['company_id'];
+
+        /*
+        |--------------------------------------------------------------------------
+        | Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyBId =
+            DB::table('companies')
+                ->insertGetId([
+                    'code' =>
+                        'CR-COMP-B',
+
+                    'name' =>
+                        'Customer Receipt Company B',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Asset Group Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $assetGroupBId =
+            DB::table('account_groups')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'code' =>
+                        'AST-T',
+
+                    'name' =>
+                        'Asset Test Company B',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Cash / Bank Account Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $bankAccountBId =
+            DB::table('accounts')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'account_group_id' =>
+                        $assetGroupBId,
+
+                    'code' =>
+                        '1008-CR-X',
+
+                    'name' =>
+                        'Customer Receipt Bank Company B',
+
+                    'normal_balance' =>
+                        'DEBIT',
+
+                    'is_header' =>
+                        false,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Customer
+        |--------------------------------------------------------------------------
+        |
+        | Customers are not company-scoped yet.
+        | Company ownership will be handled in the later Phase H master-data step.
+        |
+        */
+
+        $customerId =
+            DB::table('customers')
+                ->insertGetId([
+                    'code' =>
+                        'CUS-CR-X',
+
+                    'name' =>
+                        'Customer Receipt Cross Company Test',
+
+                    'credit_limit' =>
+                        1000000,
+
+                    'credit_days' =>
+                        30,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Sales Invoice Company A
+        |--------------------------------------------------------------------------
+        */
+
+        $salesInvoiceId =
+            DB::table('sales_invoices')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyAId,
+
+                    'invoice_no' =>
+                        'INV-CR-X',
+
+                    'customer_id' =>
+                        $customerId,
+
+                    'delivery_order_id' =>
+                        999999,
+
+                    'invoice_date' =>
+                        '2026-08-20',
+
+                    'due_date' =>
+                        '2026-09-20',
+
+                    'subtotal' =>
+                        100000,
+
+                    'discount_amount' =>
+                        0,
+
+                    'tax_amount' =>
+                        0,
+
+                    'grand_total' =>
+                        100000,
+
+                    'status' =>
+                        'POSTED',
+
+                    'remarks' =>
+                        'Cross-company cash bank source invoice',
+
+                    'created_by' =>
+                        $this->data['user_id'],
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Account Receivable Company A
+        |--------------------------------------------------------------------------
+        */
+
+        $accountReceivableId =
+            DB::table('account_receivables')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyAId,
+
+                    'customer_id' =>
+                        $customerId,
+
+                    'sales_invoice_id' =>
+                        $salesInvoiceId,
+
+                    'invoice_date' =>
+                        '2026-08-20',
+
+                    'due_date' =>
+                        '2026-09-20',
+
+                    'amount' =>
+                        100000,
+
+                    'paid_amount' =>
+                        0,
+
+                    'balance_amount' =>
+                        100000,
+
+                    'status' =>
+                        'OPEN',
+
+                    'remarks' =>
+                        'Cross-company cash bank AR test',
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Before State
+        |--------------------------------------------------------------------------
+        */
+
+        $receiptCountBefore =
+            DB::table('customer_receipts')
+                ->count();
+
+        $journalCountBefore =
+            DB::table('journals')
+                ->count();
+
+        $journalDetailCountBefore =
+            DB::table('journal_details')
+                ->count();
+
+        $sequenceBefore =
+            (int)
+            DB::table('document_sequences')
+                ->where(
+                    'document_type',
+                    'CR'
+                )
+                ->value(
+                    'current_number'
+                );
+
+        $arBefore =
+            DB::table('account_receivables')
+                ->where(
+                    'id',
+                    $accountReceivableId
+                )
+                ->first();
+
+        $this->assertNotNull(
+            $arBefore
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Act
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+
+            app(CustomerReceiptService::class)
+                ->create(
+                    new CustomerReceiptDTO(
+                        customerId:
+                            $customerId,
+
+                        accountReceivableId:
+                            $accountReceivableId,
+
+                        cashBankAccountId:
+                            $bankAccountBId,
+
+                        amount:
+                            40000,
+
+                        remarks:
+                            'Cross-company cash bank rejection test',
+
+                        createdBy:
+                            $this->data['user_id'],
+                    )
+                );
+
+            $this->fail(
+                'Customer Receipt must reject a cash/bank account from another company.'
+            );
+
+        } catch (\RuntimeException $exception) {
+
+            $this->assertSame(
+                "Cash/bank account does not belong to company {$companyAId}.",
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | No Receipt Created
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $receiptCountBefore,
+            DB::table('customer_receipts')
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | No Journal Side Effects
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $journalCountBefore,
+            DB::table('journals')
+                ->count()
+        );
+
+        $this->assertSame(
+            $journalDetailCountBefore,
+            DB::table('journal_details')
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | CR Sequence Must Not Advance
+        |--------------------------------------------------------------------------
+        */
+
+        $sequenceAfter =
+            (int)
+            DB::table('document_sequences')
+                ->where(
+                    'document_type',
+                    'CR'
+                )
+                ->value(
+                    'current_number'
+                );
+
+        $this->assertSame(
+            $sequenceBefore,
+            $sequenceAfter
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | AR Must Remain Completely Unchanged
+        |--------------------------------------------------------------------------
+        */
+
+        $arAfter =
+            DB::table('account_receivables')
+                ->where(
+                    'id',
+                    $accountReceivableId
+                )
+                ->first();
+
+        $this->assertNotNull(
+            $arAfter
+        );
+
+        $this->assertEqualsWithDelta(
+            (float) $arBefore->paid_amount,
+            (float) $arAfter->paid_amount,
+            0.01
+        );
+
+        $this->assertEqualsWithDelta(
+            (float) $arBefore->balance_amount,
+            (float) $arAfter->balance_amount,
+            0.01
+        );
+
+        $this->assertSame(
+            $arBefore->status,
+            $arAfter->status
         );
     }
 }

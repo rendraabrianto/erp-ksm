@@ -116,6 +116,7 @@ class InventoryReconciliationTestData
         */
 
         $assetGroupId = DB::table('account_groups')->insertGetId([
+            'company_id' => $companyId,
             'code'       => 'AST-T',
             'name'       => 'Asset Test',
             'is_active'  => true,
@@ -124,6 +125,7 @@ class InventoryReconciliationTestData
         ]);
 
         $expenseGroupId = DB::table('account_groups')->insertGetId([
+            'company_id' => $companyId,
             'code'       => 'EXP-T',
             'name'       => 'Expense Test',
             'is_active'  => true,
@@ -132,6 +134,7 @@ class InventoryReconciliationTestData
         ]);
 
         $liabilityGroupId = DB::table('account_groups')->insertGetId([
+            'company_id' => $companyId,
             'code'       => 'LIA-T',
             'name'       => 'Liability Test',
             'is_active'  => true,
@@ -146,6 +149,7 @@ class InventoryReconciliationTestData
         */
 
         $inventoryAccountId = DB::table('accounts')->insertGetId([
+            'company_id'      => $companyId,
             'account_group_id' => $assetGroupId,
             'code'             => '1201-T',
             'name'             => 'Persediaan Test',
@@ -157,6 +161,7 @@ class InventoryReconciliationTestData
         ]);
 
         $cogsAccountId = DB::table('accounts')->insertGetId([
+            'company_id'      => $companyId,
             'account_group_id' => $expenseGroupId,
             'code'             => '5001-T',
             'name'             => 'HPP Test',
@@ -168,6 +173,7 @@ class InventoryReconciliationTestData
         ]);
 
         $grniAccountId = DB::table('accounts')->insertGetId([
+            'company_id'      => $companyId,
             'account_group_id' => $liabilityGroupId,
             'code'             => '2101',
             'name'             => 'GRNI Test',
@@ -179,6 +185,7 @@ class InventoryReconciliationTestData
         ]);
 
         $apAccountId = DB::table('accounts')->insertGetId([
+            'company_id'      => $companyId,
             'account_group_id' => $liabilityGroupId,
             'code'             => '2001-T',
             'name'             => 'Hutang Dagang Test',
@@ -190,6 +197,7 @@ class InventoryReconciliationTestData
         ]);
 
         $arAccountId = DB::table('accounts')->insertGetId([
+            'company_id'      => $companyId,
             'account_group_id' => $assetGroupId,
             'code'             => '1101-T',
             'name'             => 'Piutang Dagang Test',
@@ -233,6 +241,7 @@ class InventoryReconciliationTestData
         */
 
         $categoryId = DB::table('item_categories')->insertGetId([
+            'company_id'           => $companyId,
             'code'                 => 'FEED-T',
             'name'                 => 'Feed Test',
             'description'          => 'Inventory reconciliation test category',
@@ -251,17 +260,18 @@ class InventoryReconciliationTestData
         */
 
         $itemId = DB::table('items')->insertGetId([
-            'item_category_id'  => $categoryId,
-            'uom_id'            => $uomId,
-            'code'              => 'ITEM-TEST',
-            'name'              => 'Inventory Test Item',
-            'minimum_stock'     => 0,
-            'maximum_stock'     => 0,
-            'average_cost'      => 0,
+            'company_id'          => $companyId,
+            'item_category_id'    => $categoryId,
+            'uom_id'              => $uomId,
+            'code'                => 'ITEM-TEST',
+            'name'                => 'Inventory Test Item',
+            'minimum_stock'       => 0,
+            'maximum_stock'       => 0,
+            'average_cost'        => 0,
             'last_purchase_price' => 0,
-            'is_active'         => true,
-            'created_at'        => now(),
-            'updated_at'        => now(),
+            'is_active'           => true,
+            'created_at'          => now(),
+            'updated_at'          => now(),
         ]);
 
         /*

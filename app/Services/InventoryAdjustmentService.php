@@ -3,16 +3,14 @@
 namespace App\Services;
 
 use App\DTO\InventoryAdjustmentCreateDTO;
-use App\Models\InventoryAdjustment;
-use App\Models\InventoryAdjustmentDetail;
-use App\Models\Item;
-use Illuminate\Support\Facades\DB;
-
 use App\DTO\InventoryTransactionDTO;
 use App\DTO\JournalEntryDTO;
 use App\DTO\JournalLineDTO;
-use App\Models\Account;
+use App\Models\InventoryAdjustment;
+use App\Models\InventoryAdjustmentDetail;
+use App\Models\Item;
 use App\Models\Warehouse;
+use Illuminate\Support\Facades\DB;
 
 class InventoryAdjustmentService
 {
@@ -22,7 +20,9 @@ class InventoryAdjustmentService
         private InventoryTransactionService $inventoryTransactionService,
         private JournalPostingService $journalPostingService,
         private CompanyGuardService $companyGuardService,
-    ) {}
+        private AccountingAccountResolverService $accountResolver,
+    ) {
+    }
 
     public function create(
         InventoryAdjustmentCreateDTO $dto
@@ -56,7 +56,8 @@ class InventoryAdjustmentService
                 |
                 */
 
-                $this->companyGuardService
+                $this
+                    ->companyGuardService
                     ->assertActorBelongsToCompany(
                         $dto->createdBy,
                         $companyId
@@ -91,7 +92,10 @@ class InventoryAdjustmentService
                             $dto->createdBy,
                     ]);
 
-                foreach ($dto->details as $detail) {
+                foreach (
+                    $dto->details
+                    as $detail
+                ) {
 
                     $itemId =
                         (int) $detail['item_id'];
@@ -105,21 +109,35 @@ class InventoryAdjustmentService
                         );
                     }
 
-                    Item::findOrFail(
-                        $itemId
-                    );
+                    $item =
+                        Item::query()
+                            ->findOrFail(
+                                $itemId
+                            );
 
                     /*
                     |--------------------------------------------------------------------------
-                    | Snapshot hanya untuk tampilan DRAFT
+                    | Item Company Ownership Guard
                     |--------------------------------------------------------------------------
                     |
-                    | Saat POST nanti angka ini WAJIB dihitung ulang.
+                    | Warehouse adalah authoritative company ownership source untuk
+                    | inventory adjustment. Item wajib dimiliki company yang sama.
                     |
                     */
 
+                    if (
+                        (int) $item->company_id
+                        !==
+                        $companyId
+                    ) {
+                        throw new \RuntimeException(
+                            'Item does not belong to transaction company.'
+                        );
+                    }
+
                     $state =
-                        $this->costingService
+                        $this
+                            ->costingService
                             ->getCurrentState(
                                 $dto->warehouseId,
                                 $itemId
@@ -226,7 +244,8 @@ class InventoryAdjustmentService
                 |
                 */
 
-                $this->companyGuardService
+                $this
+                    ->companyGuardService
                     ->assertActorBelongsToCompany(
                         $postedBy,
                         (int) $adjustment->company_id
@@ -249,6 +268,9 @@ class InventoryAdjustmentService
                         'Only DRAFT inventory adjustment can be posted.'
                     );
                 }
+
+                $companyId =
+                    (int) $adjustment->company_id;
 
                 foreach (
                     $adjustment->details
@@ -273,6 +295,12 @@ class InventoryAdjustmentService
                         );
                     }
 
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Validate Accounting Mapping
+                    |--------------------------------------------------------------------------
+                    */
+
                     if (
                         ! $category
                             ->inventory_account_id
@@ -296,12 +324,61 @@ class InventoryAdjustmentService
 
                     /*
                     |--------------------------------------------------------------------------
+                    | Company Accounting Guard
+                    |--------------------------------------------------------------------------
+                    |
+                    | Semua account mapping pada Item Category wajib berasal
+                    | dari company yang sama dengan Inventory Adjustment.
+                    |
+                    | Guard dilakukan sebelum inventory movement dibuat.
+                    |
+                    */
+
+                    $inventoryAccount =
+                        $this
+                            ->accountResolver
+                            ->accountForCompany(
+                                (int) $category
+                                    ->inventory_account_id,
+
+                                $companyId,
+
+                                'Inventory account'
+                            );
+
+                    $adjustmentGainAccount =
+                        $this
+                            ->accountResolver
+                            ->accountForCompany(
+                                (int) $category
+                                    ->adjustment_gain_account_id,
+
+                                $companyId,
+
+                                'Adjustment gain account'
+                            );
+
+                    $adjustmentLossAccount =
+                        $this
+                            ->accountResolver
+                            ->accountForCompany(
+                                (int) $category
+                                    ->adjustment_loss_account_id,
+
+                                $companyId,
+
+                                'Adjustment loss account'
+                            );
+
+                    /*
+                    |--------------------------------------------------------------------------
                     | Recalculate current stock at posting time
                     |--------------------------------------------------------------------------
                     */
 
                     $state =
-                        $this->costingService
+                        $this
+                            ->costingService
                             ->getCurrentState(
                                 $adjustment->warehouse_id,
                                 $detail->item_id
@@ -362,7 +439,11 @@ class InventoryAdjustmentService
                     $qtyIn = 0.0;
                     $qtyOut = 0.0;
 
-                    if ($adjustmentQty > 0) {
+                    if (
+                        $adjustmentQty
+                        >
+                        0
+                    ) {
                         $qtyIn =
                             $adjustmentQty;
                     } else {
@@ -374,7 +455,7 @@ class InventoryAdjustmentService
 
                     /*
                     |--------------------------------------------------------------------------
-                    | Post inventory movement
+                    | Post Inventory Movement
                     |--------------------------------------------------------------------------
                     */
 
@@ -425,7 +506,7 @@ class InventoryAdjustmentService
 
                     /*
                     |--------------------------------------------------------------------------
-                    | Update authoritative adjustment detail
+                    | Update Authoritative Adjustment Detail
                     |--------------------------------------------------------------------------
                     */
 
@@ -457,23 +538,15 @@ class InventoryAdjustmentService
 
                     /*
                     |--------------------------------------------------------------------------
-                    | Resolve accounts
+                    | Build Journal Lines
                     |--------------------------------------------------------------------------
                     */
 
-                    $inventoryAccount =
-                        Account::findOrFail(
-                            $category
-                                ->inventory_account_id
-                        );
-
-                    if ($adjustmentQty > 0) {
-
-                        $offsetAccount =
-                            Account::findOrFail(
-                                $category
-                                    ->adjustment_gain_account_id
-                            );
+                    if (
+                        $adjustmentQty
+                        >
+                        0
+                    ) {
 
                         $lines = [
                             new JournalLineDTO(
@@ -498,7 +571,7 @@ class InventoryAdjustmentService
 
                             new JournalLineDTO(
                                 accountCode:
-                                    $offsetAccount->code,
+                                    $adjustmentGainAccount->code,
 
                                 quantity:
                                     0,
@@ -516,18 +589,13 @@ class InventoryAdjustmentService
                                     'Inventory Adjustment Gain',
                             ),
                         ];
-                    } else {
 
-                        $offsetAccount =
-                            Account::findOrFail(
-                                $category
-                                    ->adjustment_loss_account_id
-                            );
+                    } else {
 
                         $lines = [
                             new JournalLineDTO(
                                 accountCode:
-                                    $offsetAccount->code,
+                                    $adjustmentLossAccount->code,
 
                                 quantity:
                                     0,
@@ -569,7 +637,7 @@ class InventoryAdjustmentService
 
                     /*
                     |--------------------------------------------------------------------------
-                    | Post journal
+                    | Post Journal
                     |--------------------------------------------------------------------------
                     */
 
@@ -577,23 +645,43 @@ class InventoryAdjustmentService
                         ->journalPostingService
                         ->post(
                             new JournalEntryDTO(
-                                referenceType: 'INVENTORY_ADJUSTMENT',
-                                referenceId: (int) $adjustment->id,
-                                description: 'Inventory Adjustment '                                    .
+                                referenceType:
+                                    'INVENTORY_ADJUSTMENT',
+
+                                referenceId:
+                                    (int)
+                                    $adjustment->id,
+
+                                description:
+                                    'Inventory Adjustment '
+                                    .
                                     $adjustment
                                         ->adjustment_no,
-                                createdBy: $postedBy,
-                                lines: $lines,
-                                companyId: (int) $adjustment->company_id,
+
+                                createdBy:
+                                    $postedBy,
+
+                                lines:
+                                    $lines,
+
+                                companyId:
+                                    $companyId,
+
                                 journalDate:
                                     $adjustment
                                         ->adjustment_date
                                         ->format(
                                             'Y-m-d'
                                         ),
-                                journalPurpose: 'NORMAL',
-                                sourceJournalId: null,
-                                reconciliationKey: null,
+
+                                journalPurpose:
+                                    'NORMAL',
+
+                                sourceJournalId:
+                                    null,
+
+                                reconciliationKey:
+                                    null,
                             )
                         );
                 }

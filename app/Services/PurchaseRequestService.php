@@ -5,6 +5,7 @@ namespace App\Services;
 use App\DTO\PurchaseRequestDTO;
 use App\Models\PurchaseRequestDetail;
 use App\Models\Warehouse;
+use App\Models\Item;
 use App\Repositories\Contracts\PurchaseRequestRepositoryInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -95,12 +96,40 @@ class PurchaseRequestService
                     $dto->lines
                     as $line
                 ) {
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Item Company Ownership
+                    |--------------------------------------------------------------------------
+                    |
+                    | Purchase Request ownership berasal dari Warehouse.
+                    | Setiap Item pada PR wajib dimiliki company yang sama.
+                    |
+                    */
+
+                    $item =
+                        Item::query()
+                            ->whereKey(
+                                $line->itemId
+                            )
+                            ->firstOrFail();
+
+                    if (
+                        (int) $item->company_id
+                        !==
+                        $companyId
+                    ) {
+                        throw new \RuntimeException(
+                            'Item does not belong to transaction company.'
+                        );
+                    }
+
                     PurchaseRequestDetail::create([
                         'purchase_request_id' =>
                             $pr->id,
 
                         'item_id' =>
-                            $line->itemId,
+                            $item->id,
 
                         'qty' =>
                             $line->qty,

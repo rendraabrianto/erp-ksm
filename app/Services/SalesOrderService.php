@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\DTO\SalesOrderDTO;
 use App\Models\User;
+use App\Models\Item;
 use App\Repositories\Contracts\SalesOrderRepositoryInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -92,11 +93,39 @@ class SalesOrderService
                     as $line
                 ) {
 
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Item Company Ownership
+                    |--------------------------------------------------------------------------
+                    |
+                    | Sales Order adalah root document pada sales cycle.
+                    | Setiap Item pada Sales Order wajib dimiliki company yang sama
+                    | dengan company Sales Order.
+                    |
+                    */
+
+                    $item =
+                        Item::query()
+                            ->whereKey(
+                                $line->itemId
+                            )
+                            ->firstOrFail();
+
+                    if (
+                        (int) $item->company_id
+                        !==
+                        $companyId
+                    ) {
+                        throw new \RuntimeException(
+                            'Item does not belong to transaction company.'
+                        );
+                    }
+
                     $so
                         ->details()
                         ->create([
                             'item_id' =>
-                                $line->itemId,
+                                $item->id,
 
                             'qty' =>
                                 $line->qty,

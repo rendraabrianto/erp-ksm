@@ -20,6 +20,7 @@ class GoodsReceiptService
         private AutoJournalService $autoJournalService,
         private AuditLogService $auditLogService,
         private CompanyGuardService $companyGuardService,
+        private AccountingAccountResolverService $accountResolver,
     ) {
     }
 
@@ -63,7 +64,8 @@ class GoodsReceiptService
                 |
                 */
 
-                $this->companyGuardService
+                $this
+                    ->companyGuardService
                     ->assertActorBelongsToCompany(
                         $dto->createdBy,
                         $companyId
@@ -234,11 +236,31 @@ class GoodsReceiptService
                             ->findOrFail(
                                 $line->itemId
                             );
+                    
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Item Company Ownership Guard
+                    |--------------------------------------------------------------------------
+                    |
+                    | Purchase Order adalah authoritative company ownership source untuk GR.
+                    | Item pada setiap Purchase Order Detail wajib dimiliki company yang sama.
+                    |
+                    */
 
                     if (
-                        !$item->category
+                        (int) $item->company_id
+                        !==
+                        $companyId
+                    ) {
+                        throw new \RuntimeException(
+                            'Item does not belong to transaction company.'
+                        );
+                    }
+
+                    if (
+                        ! $item->category
                         ||
-                        !$item
+                        ! $item
                             ->category
                             ->inventoryAccount
                     ) {
@@ -249,6 +271,29 @@ class GoodsReceiptService
                             )
                         );
                     }
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Company Accounting Guard
+                    |--------------------------------------------------------------------------
+                    |
+                    | Inventory account yang dipetakan pada Item Category
+                    | wajib berasal dari company yang sama dengan GR / PO.
+                    |
+                    */
+
+                    $inventoryAccount =
+                        $this
+                            ->accountResolver
+                            ->accountForCompany(
+                                (int) $item
+                                    ->category
+                                    ->inventory_account_id,
+
+                                $companyId,
+
+                                'Inventory account'
+                            );
 
                     /*
                     |--------------------------------------------------------------------------
@@ -342,13 +387,11 @@ class GoodsReceiptService
                     |--------------------------------------------------------------------------
                     | Collect Accounting Information
                     |--------------------------------------------------------------------------
+                    |
+                    | $inventoryAccount sudah berupa Account model yang telah
+                    | lolos company/account guard.
+                    |
                     */
-
-                    $inventoryAccount =
-                        $item
-                            ->category
-                            ->inventoryAccount
-                            ->code;
 
                     $amount =
                         (float) $line->qty
@@ -358,7 +401,7 @@ class GoodsReceiptService
                     $journalInventoryLines[] =
                         [
                             'accountCode' =>
-                                $inventoryAccount,
+                                $inventoryAccount->code,
 
                             'amount' =>
                                 $amount,
@@ -450,7 +493,6 @@ class GoodsReceiptService
                     &&
                     $allCompleted
                 ) {
-
                     $purchaseOrder->status =
                         'COMPLETED';
 
@@ -459,7 +501,6 @@ class GoodsReceiptService
                 } elseif (
                     $hasReceivedQuantity
                 ) {
-
                     $purchaseOrder->status =
                         'PARTIAL';
 

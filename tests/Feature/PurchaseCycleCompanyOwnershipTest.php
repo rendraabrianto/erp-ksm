@@ -7,6 +7,8 @@ use App\DTO\PurchaseOrderLineDTO;
 use App\DTO\PurchaseRequestDTO;
 use App\DTO\PurchaseRequestLineDTO;
 use App\Models\Company;
+use App\Models\Item;
+use App\Models\ItemCategory;
 use App\Services\PurchaseOrderService;
 use App\Services\PurchaseRequestService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -93,6 +95,285 @@ class PurchaseCycleCompanyOwnershipTest extends TestCase
                     $this->data['company_id'],
                 'warehouse_id' =>
                     $this->data['warehouse_id'],
+            ]
+        );
+    }
+
+    public function test_purchase_request_rejects_item_from_another_company():
+        void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Arrange - Company A Context
+        |--------------------------------------------------------------------------
+        */
+
+        $itemA =
+            Item::query()
+                ->findOrFail(
+                    $this->data['item_id']
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Arrange - Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyB =
+            Company::query()
+                ->create([
+                    'code' =>
+                        'COMP-PR-B',
+
+                    'name' =>
+                        'Purchase Request Company B',
+
+                    'phone' =>
+                        null,
+
+                    'email' =>
+                        null,
+
+                    'address' =>
+                        null,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        $categoryB =
+            ItemCategory::query()
+                ->create([
+                    'company_id' =>
+                        $companyB->id,
+
+                    'code' =>
+                        'CAT-PR-B',
+
+                    'name' =>
+                        'Purchase Request Category B',
+
+                    'description' =>
+                        'Cross-company PR item attack',
+
+                    'inventory_account_id' =>
+                        null,
+
+                    'cogs_account_id' =>
+                        null,
+
+                    'sales_account_id' =>
+                        null,
+
+                    'adjustment_gain_account_id' =>
+                        null,
+
+                    'adjustment_loss_account_id' =>
+                        null,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        $itemB =
+            Item::query()
+                ->create([
+                    'company_id' =>
+                        $companyB->id,
+
+                    'item_category_id' =>
+                        $categoryB->id,
+
+                    'uom_id' =>
+                        $itemA->uom_id,
+
+                    'code' =>
+                        'ITEM-PR-B',
+
+                    'name' =>
+                        'Purchase Request Item Company B',
+
+                    'description' =>
+                        'Must not enter Company A purchase request',
+
+                    'minimum_stock' =>
+                        0,
+
+                    'maximum_stock' =>
+                        0,
+
+                    'average_cost' =>
+                        0,
+
+                    'last_purchase_price' =>
+                        0,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Snapshot Before Attack
+        |--------------------------------------------------------------------------
+        */
+
+        $purchaseRequestCountBefore =
+            DB::table(
+                'purchase_requests'
+            )->count();
+
+        $purchaseRequestDetailCountBefore =
+            DB::table(
+                'purchase_request_details'
+            )->count();
+
+        $auditLogCountBefore =
+            DB::table(
+                'audit_logs'
+            )->count();
+
+        $sequenceBefore =
+            DB::table(
+                'document_sequences'
+            )
+                ->where(
+                    'document_type',
+                    'PR'
+                )
+                ->value(
+                    'current_number'
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Execute Attack
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+
+            app(PurchaseRequestService::class)
+                ->create(
+                    new PurchaseRequestDTO(
+                        warehouseId:
+                            $this->data['warehouse_id'],
+
+                        remarks:
+                            'Cross-company item attack',
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        lines: [
+                            new PurchaseRequestLineDTO(
+                                itemId:
+                                    $itemB->id,
+
+                                qty:
+                                    10,
+
+                                remarks:
+                                    'Foreign company item',
+                            ),
+                        ],
+                    )
+                );
+
+            $this->fail(
+                'Purchase Request must reject an item from another company.'
+            );
+
+        } catch (\RuntimeException $exception) {
+
+            $this->assertSame(
+                'Item does not belong to transaction company.',
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Attack Setup
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            (int) $this->data['company_id'],
+            (int) DB::table('warehouses')
+                ->where(
+                    'id',
+                    $this->data['warehouse_id']
+                )
+                ->value(
+                    'company_id'
+                )
+        );
+
+        $this->assertNotSame(
+            (int) $this->data['company_id'],
+            (int) $itemB->company_id
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Transaction Fully Rolled Back
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $purchaseRequestCountBefore,
+            DB::table(
+                'purchase_requests'
+            )->count()
+        );
+
+        $this->assertSame(
+            $purchaseRequestDetailCountBefore,
+            DB::table(
+                'purchase_request_details'
+            )->count()
+        );
+
+        $this->assertSame(
+            $auditLogCountBefore,
+            DB::table(
+                'audit_logs'
+            )->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Document Sequence Rolled Back
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $sequenceBefore,
+            DB::table(
+                'document_sequences'
+            )
+                ->where(
+                    'document_type',
+                    'PR'
+                )
+                ->value(
+                    'current_number'
+                )
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Foreign Item Never Reaches PR Detail
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertDatabaseMissing(
+            'purchase_request_details',
+            [
+                'item_id' =>
+                    $itemB->id,
             ]
         );
     }
@@ -873,6 +1154,433 @@ class PurchaseCycleCompanyOwnershipTest extends TestCase
             $beforePrDetailCount,
             DB::table('purchase_request_details')
                 ->count()
+        );
+    }
+
+    private function createForeignCompanyItem(
+        string $suffix
+    ): Item {
+        $itemA =
+            Item::query()
+                ->findOrFail(
+                    $this->data['item_id']
+                );
+
+        $companyB =
+            Company::query()
+                ->create([
+                    'code' =>
+                        'COMP-PO-B-' . $suffix,
+
+                    'name' =>
+                        'Purchase Order Company B ' . $suffix,
+
+                    'phone' =>
+                        null,
+
+                    'email' =>
+                        null,
+
+                    'address' =>
+                        null,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        $categoryB =
+            ItemCategory::query()
+                ->create([
+                    'company_id' =>
+                        $companyB->id,
+
+                    'code' =>
+                        'CAT-PO-B-' . $suffix,
+
+                    'name' =>
+                        'Purchase Order Category B ' . $suffix,
+
+                    'description' =>
+                        'Cross-company PO item attack',
+
+                    'inventory_account_id' =>
+                        null,
+
+                    'cogs_account_id' =>
+                        null,
+
+                    'sales_account_id' =>
+                        null,
+
+                    'adjustment_gain_account_id' =>
+                        null,
+
+                    'adjustment_loss_account_id' =>
+                        null,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        return Item::query()
+            ->create([
+                'company_id' =>
+                    $companyB->id,
+
+                'item_category_id' =>
+                    $categoryB->id,
+
+                'uom_id' =>
+                    $itemA->uom_id,
+
+                'code' =>
+                    'ITEM-PO-B-' . $suffix,
+
+                'name' =>
+                    'Purchase Order Item Company B ' . $suffix,
+
+                'description' =>
+                    'Must not enter Company A purchase order',
+
+                'minimum_stock' =>
+                    0,
+
+                'maximum_stock' =>
+                    0,
+
+                'average_cost' =>
+                    0,
+
+                'last_purchase_price' =>
+                    0,
+
+                'is_active' =>
+                    true,
+            ]);
+    }
+
+    public function test_purchase_order_from_pr_rejects_item_from_another_company():
+        void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Arrange - Company A Purchase Request
+        |--------------------------------------------------------------------------
+        */
+
+        $pr =
+            app(PurchaseRequestService::class)
+                ->create(
+                    new PurchaseRequestDTO(
+                        warehouseId:
+                            $this->data['warehouse_id'],
+
+                        remarks:
+                            'Company A PR for foreign item attack',
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        lines: [
+                            new PurchaseRequestLineDTO(
+                                itemId:
+                                    $this->data['item_id'],
+
+                                qty:
+                                    10,
+
+                                remarks:
+                                    'Company A item',
+                            ),
+                        ],
+                    )
+                );
+
+        $itemB =
+            $this->createForeignCompanyItem(
+                'FROM-PR'
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Snapshot
+        |--------------------------------------------------------------------------
+        */
+
+        $poCountBefore =
+            DB::table(
+                'purchase_orders'
+            )->count();
+
+        $poDetailCountBefore =
+            DB::table(
+                'purchase_order_details'
+            )->count();
+
+        $auditLogCountBefore =
+            DB::table(
+                'audit_logs'
+            )->count();
+
+        $sequenceBefore =
+            DB::table(
+                'document_sequences'
+            )
+                ->where(
+                    'document_type',
+                    'PO'
+                )
+                ->value(
+                    'current_number'
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Execute Attack
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+
+            app(PurchaseOrderService::class)
+                ->create(
+                    new PurchaseOrderDTO(
+                        purchaseRequestId:
+                            $pr->id,
+
+                        supplierName:
+                            'Cross Company Supplier',
+
+                        remarks:
+                            'PO from PR foreign item attack',
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        lines: [
+                            new PurchaseOrderLineDTO(
+                                itemId:
+                                    $itemB->id,
+
+                                qty:
+                                    10,
+
+                                unitPrice:
+                                    7000,
+
+                                remarks:
+                                    'Foreign company item',
+                            ),
+                        ],
+                    )
+                );
+
+            $this->fail(
+                'Purchase Order from PR must reject an item from another company.'
+            );
+
+        } catch (\RuntimeException $exception) {
+
+            $this->assertSame(
+                'Item does not belong to transaction company.',
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Ownership Setup
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            (int) $this->data['company_id'],
+            (int) $pr->company_id
+        );
+
+        $this->assertNotSame(
+            (int) $pr->company_id,
+            (int) $itemB->company_id
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Full Rollback
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $poCountBefore,
+            DB::table(
+                'purchase_orders'
+            )->count()
+        );
+
+        $this->assertSame(
+            $poDetailCountBefore,
+            DB::table(
+                'purchase_order_details'
+            )->count()
+        );
+
+        $this->assertSame(
+            $auditLogCountBefore,
+            DB::table(
+                'audit_logs'
+            )->count()
+        );
+
+        $this->assertSame(
+            $sequenceBefore,
+            DB::table(
+                'document_sequences'
+            )
+                ->where(
+                    'document_type',
+                    'PO'
+                )
+                ->value(
+                    'current_number'
+                )
+        );
+
+        $this->assertDatabaseMissing(
+            'purchase_order_details',
+            [
+                'item_id' =>
+                    $itemB->id,
+            ]
+        );
+    }
+
+    public function test_manual_purchase_order_rejects_item_from_another_company():
+        void
+    {
+        $itemB =
+            $this->createForeignCompanyItem(
+                'MANUAL'
+            );
+
+        $poCountBefore =
+            DB::table(
+                'purchase_orders'
+            )->count();
+
+        $poDetailCountBefore =
+            DB::table(
+                'purchase_order_details'
+            )->count();
+
+        $auditLogCountBefore =
+            DB::table(
+                'audit_logs'
+            )->count();
+
+        $sequenceBefore =
+            DB::table(
+                'document_sequences'
+            )
+                ->where(
+                    'document_type',
+                    'PO'
+                )
+                ->value(
+                    'current_number'
+                );
+
+        try {
+
+            app(PurchaseOrderService::class)
+                ->create(
+                    new PurchaseOrderDTO(
+                        purchaseRequestId:
+                            null,
+
+                        supplierName:
+                            'Manual Cross Company Supplier',
+
+                        remarks:
+                            'Manual PO foreign item attack',
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        lines: [
+                            new PurchaseOrderLineDTO(
+                                itemId:
+                                    $itemB->id,
+
+                                qty:
+                                    5,
+
+                                unitPrice:
+                                    7500,
+
+                                remarks:
+                                    'Foreign company item',
+                            ),
+                        ],
+                    )
+                );
+
+            $this->fail(
+                'Manual Purchase Order must reject an item from another company.'
+            );
+
+        } catch (\RuntimeException $exception) {
+
+            $this->assertSame(
+                'Item does not belong to transaction company.',
+                $exception->getMessage()
+            );
+        }
+
+        $this->assertNotSame(
+            (int) $this->data['company_id'],
+            (int) $itemB->company_id
+        );
+
+        $this->assertSame(
+            $poCountBefore,
+            DB::table(
+                'purchase_orders'
+            )->count()
+        );
+
+        $this->assertSame(
+            $poDetailCountBefore,
+            DB::table(
+                'purchase_order_details'
+            )->count()
+        );
+
+        $this->assertSame(
+            $auditLogCountBefore,
+            DB::table(
+                'audit_logs'
+            )->count()
+        );
+
+        $this->assertSame(
+            $sequenceBefore,
+            DB::table(
+                'document_sequences'
+            )
+                ->where(
+                    'document_type',
+                    'PO'
+                )
+                ->value(
+                    'current_number'
+                )
+        );
+
+        $this->assertDatabaseMissing(
+            'purchase_order_details',
+            [
+                'item_id' =>
+                    $itemB->id,
+            ]
         );
     }
 }

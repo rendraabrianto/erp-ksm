@@ -7,9 +7,9 @@ use App\DTO\InventoryTransactionDTO;
 use App\Models\Item;
 use App\Models\SalesOrder;
 use App\Models\SalesOrderDetail;
+use App\Models\Warehouse;
 use App\Repositories\Contracts\DeliveryOrderRepositoryInterface;
 use Illuminate\Support\Facades\DB;
-use App\Models\Warehouse;
 
 class DeliveryOrderService
 {
@@ -20,6 +20,7 @@ class DeliveryOrderService
         private AutoJournalService $autoJournalService,
         private AuditLogService $auditService,
         protected CompanyGuardService $companyGuardService,
+        private AccountingAccountResolverService $accountResolver,
     ) {
     }
 
@@ -59,7 +60,9 @@ class DeliveryOrderService
                 $companyId =
                     (int) $salesOrder->company_id;
 
-                $this->companyGuardService->assertActorBelongsToCompany(
+                $this
+                    ->companyGuardService
+                    ->assertActorBelongsToCompany(
                         $dto->createdBy,
                         $companyId
                     );
@@ -99,6 +102,7 @@ class DeliveryOrderService
                         ->create([
                             'company_id' =>
                                 $companyId,
+
                             'do_no' =>
                                 $this
                                     ->documentSequenceService
@@ -189,10 +193,30 @@ class DeliveryOrderService
                                 $line->itemId
                             );
 
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Item Company Ownership Guard
+                    |--------------------------------------------------------------------------
+                    |
+                    | Sales Order adalah authoritative company ownership source untuk DO.
+                    | Item pada setiap Sales Order Detail wajib dimiliki company yang sama.
+                    |
+                    */
+
                     if (
-                        !$item->category
+                        (int) $item->company_id
+                        !==
+                        $companyId
+                    ) {
+                        throw new \RuntimeException(
+                            'Item does not belong to transaction company.'
+                        );
+                    }
+
+                    if (
+                        ! $item->category
                         ||
-                        !$item
+                        ! $item
                             ->category
                             ->inventoryAccount
                     ) {
@@ -205,7 +229,7 @@ class DeliveryOrderService
                     }
 
                     if (
-                        !$item
+                        ! $item
                             ->category
                             ->cogsAccount
                     ) {
@@ -216,6 +240,42 @@ class DeliveryOrderService
                             )
                         );
                     }
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Company Accounting Guard
+                    |--------------------------------------------------------------------------
+                    |
+                    | Account mapping pada Item Category wajib berasal dari
+                    | company yang sama dengan Delivery Order.
+                    |
+                    */
+
+                    $inventoryAccount =
+                        $this
+                            ->accountResolver
+                            ->accountForCompany(
+                                (int) $item
+                                    ->category
+                                    ->inventory_account_id,
+
+                                $companyId,
+
+                                'Inventory account'
+                            );
+
+                    $cogsAccount =
+                        $this
+                            ->accountResolver
+                            ->accountForCompany(
+                                (int) $item
+                                    ->category
+                                    ->cogs_account_id,
+
+                                $companyId,
+
+                                'COGS account'
+                            );
 
                     /*
                     |--------------------------------------------------------------------------
@@ -321,19 +381,11 @@ class DeliveryOrderService
                     |--------------------------------------------------------------------------
                     | Accounting
                     |--------------------------------------------------------------------------
+                    |
+                    | $inventoryAccount dan $cogsAccount di sini sudah berupa
+                    | Account model yang telah lolos company/account guard.
+                    |
                     */
-
-                    $cogsAccount =
-                        $item
-                            ->category
-                            ->cogsAccount
-                            ->code;
-
-                    $inventoryAccount =
-                        $item
-                            ->category
-                            ->inventoryAccount
-                            ->code;
 
                     $amount =
                         (float)
@@ -349,10 +401,10 @@ class DeliveryOrderService
                     $journalTransactionLines[] =
                         [
                             'cogsAccount' =>
-                                $cogsAccount,
+                                $cogsAccount->code,
 
                             'inventoryAccount' =>
-                                $inventoryAccount,
+                                $inventoryAccount->code,
 
                             'amount' =>
                                 $amount,
@@ -373,13 +425,26 @@ class DeliveryOrderService
                     $this
                         ->autoJournalService
                         ->deliveryOrder(
-                            cogsAccount: $journalTransactionLines,
-                            inventoryAccount: null,
-                            amount: null,
-                            referenceId: $do->id,
-                            userId: $dto->createdBy,
-                            journalDate: $deliveryDate,
-                            companyId: $companyId,
+                            cogsAccount:
+                                $journalTransactionLines,
+
+                            inventoryAccount:
+                                null,
+
+                            amount:
+                                null,
+
+                            referenceId:
+                                $do->id,
+
+                            userId:
+                                $dto->createdBy,
+
+                            journalDate:
+                                $deliveryDate,
+
+                            companyId:
+                                $companyId,
                         );
                 }
 
@@ -427,7 +492,6 @@ class DeliveryOrderService
                     &&
                     $allCompleted
                 ) {
-
                     $salesOrder->status =
                         'COMPLETED';
 
@@ -436,7 +500,6 @@ class DeliveryOrderService
                 } elseif (
                     $hasDeliveredQuantity
                 ) {
-
                     $salesOrder->status =
                         'PARTIAL';
 
@@ -468,7 +531,6 @@ class DeliveryOrderService
                             null,
 
                         newValues: [
-
                             'do_no' =>
                                 $do->do_no,
 

@@ -472,6 +472,7 @@ class PurchaseInvoiceClosedLoopTest extends TestCase
                 ->insertGetId([
                     'company_id' =>
                         $this->data['company_id'],
+                        
                     'po_no' =>
                         'PO-PI-ROLLBACK-001',
 

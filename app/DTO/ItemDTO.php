@@ -5,6 +5,7 @@ namespace App\DTO;
 class ItemDTO
 {
     public function __construct(
+        public int $companyId,
         public int $itemCategoryId,
         public int $uomId,
         public string $code,

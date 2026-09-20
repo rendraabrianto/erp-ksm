@@ -10,13 +10,12 @@ use Illuminate\Support\Facades\DB;
 class CustomerReceiptService
 {
     public function __construct(
-
         private CustomerReceiptRepositoryInterface $repository,
         private DocumentSequenceService $documentSequenceService,
         private AutoJournalService $autoJournalService,
         private AuditLogService $auditService,
         protected CompanyGuardService $companyGuardService,
-
+        private AccountingAccountResolverService $accountResolver,
     ) {}
 
     public function create(
@@ -71,6 +70,24 @@ class CustomerReceiptService
                 ->assertActorBelongsToCompany(
                     $dto->createdBy,
                     $companyId
+                );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Cash / Bank Account Company Guard
+            |--------------------------------------------------------------------------
+            |
+            | Selected receipt account must belong to the same company as the AR.
+            | Validate before sequence generation, receipt creation, AR mutation,
+            | and journal posting.
+            |
+            */
+
+            $this->accountResolver
+                ->accountForCompany(
+                    $dto->cashBankAccountId,
+                    $companyId,
+                    'Cash/bank account'
                 );
 
             /*

@@ -23,6 +23,9 @@ use App\Models\Journal;
 use App\Models\StockLedger;
 use App\DTO\InventoryTransactionDTO;
 use App\Services\InventoryTransactionService;
+use App\Models\Company;
+use App\Models\DocumentSequence;
+use App\Models\ItemCategory;
 
 class DeliveryOrderClosedLoopTest extends TestCase
 {
@@ -1664,6 +1667,963 @@ class DeliveryOrderClosedLoopTest extends TestCase
         $this->assertSame(
             'COMPLETED',
             $salesOrder->status
+        );
+    }
+
+    public function test_delivery_order_rejects_inventory_account_from_another_company(): void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Company A Context
+        |--------------------------------------------------------------------------
+        */
+
+        $companyAId =
+            (int) $this->data['company_id'];
+
+        $item =
+            Item::query()
+                ->findOrFail(
+                    $this->data['item_id']
+                );
+
+        $category =
+            DB::table('item_categories')
+                ->where(
+                    'id',
+                    $item->item_category_id
+                )
+                ->first();
+
+        $this->assertNotNull(
+            $category
+        );
+
+        $this->assertSame(
+            $companyAId,
+            (int) $category->company_id
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyBId =
+            DB::table('companies')
+                ->insertGetId([
+                    'code' =>
+                        'COMP-DO-INV-B',
+
+                    'name' =>
+                        'Company B DO Inventory Attack',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        $this->assertNotSame(
+            $companyAId,
+            (int) $companyBId
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Company B Asset Group
+        |--------------------------------------------------------------------------
+        */
+
+        $assetGroupBId =
+            DB::table('account_groups')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'code' =>
+                        'AST-DO-B',
+
+                    'name' =>
+                        'Asset Company B DO Attack',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Company B Inventory Account
+        |--------------------------------------------------------------------------
+        */
+
+        $inventoryAccountBId =
+            DB::table('accounts')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'account_group_id' =>
+                        $assetGroupBId,
+
+                    'code' =>
+                        '1201-DO-B',
+
+                    'name' =>
+                        'Inventory Company B DO Attack',
+
+                    'normal_balance' =>
+                        'DEBIT',
+
+                    'is_header' =>
+                        false,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Poison Category A
+        |--------------------------------------------------------------------------
+        |
+        | Item Category tetap milik Company A.
+        | Inventory Account sengaja diarahkan ke Company B.
+        |
+        */
+
+        DB::table('item_categories')
+            ->where(
+                'id',
+                $item->item_category_id
+            )
+            ->update([
+                'inventory_account_id' =>
+                    $inventoryAccountBId,
+
+                'updated_at' =>
+                    now(),
+            ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Sales Order Company A
+        |--------------------------------------------------------------------------
+        */
+
+        [
+            $salesOrder,
+            $salesOrderDetail,
+        ] =
+            $this->createSalesOrder(
+                qty: 10,
+                unitPrice: 10000,
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Capture Before Attack
+        |--------------------------------------------------------------------------
+        */
+
+        $deliveryOrderCountBefore =
+            DeliveryOrder::query()
+                ->count();
+
+        $deliveryOrderDetailCountBefore =
+            DeliveryOrderDetail::query()
+                ->count();
+
+        $stockLedgerCountBefore =
+            StockLedger::query()
+                ->count();
+
+        $journalCountBefore =
+            Journal::query()
+                ->count();
+
+        $salesOrderStatusBefore =
+            $salesOrder->status;
+
+        $salesOrderDetail->refresh();
+
+        $deliveredQtyBefore =
+            (float)
+            $salesOrderDetail->delivered_qty;
+
+        /*
+        |--------------------------------------------------------------------------
+        | Execute Attack
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+
+            app(DeliveryOrderService::class)
+                ->create(
+                    new DeliveryOrderDTO(
+                        salesOrderId:
+                            $salesOrder->id,
+
+                        remarks:
+                            'Cross-company inventory account attack',
+
+                        warehouseId:
+                            $this->data['warehouse_id'],
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        lines: [
+                            new DeliveryOrderLineDTO(
+                                itemId:
+                                    $this->data['item_id'],
+
+                                qty:
+                                    10,
+
+                                salesOrderDetailId:
+                                    $salesOrderDetail->id,
+
+                                remarks:
+                                    'Cross-company inventory attack',
+                            ),
+                        ],
+
+                        deliveryDate:
+                            '2026-08-08',
+                    )
+                );
+
+            $this->fail(
+                'Delivery Order must reject an inventory account from another company.'
+            );
+
+        } catch (RuntimeException $exception) {
+
+            $this->assertSame(
+                sprintf(
+                    'Inventory account does not belong to company %d.',
+                    $companyAId
+                ),
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Transaction Must Fully Roll Back
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $deliveryOrderCountBefore,
+            DeliveryOrder::query()
+                ->count()
+        );
+
+        $this->assertSame(
+            $deliveryOrderDetailCountBefore,
+            DeliveryOrderDetail::query()
+                ->count()
+        );
+
+        $this->assertSame(
+            $stockLedgerCountBefore,
+            StockLedger::query()
+                ->count()
+        );
+
+        $this->assertSame(
+            $journalCountBefore,
+            Journal::query()
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Sales Order Must Remain Unchanged
+        |--------------------------------------------------------------------------
+        */
+
+        $salesOrder->refresh();
+        $salesOrderDetail->refresh();
+
+        $this->assertSame(
+            $salesOrderStatusBefore,
+            $salesOrder->status
+        );
+
+        $this->assertEqualsWithDelta(
+            $deliveredQtyBefore,
+            (float)
+            $salesOrderDetail->delivered_qty,
+            0.0001
+        );
+    }
+
+    public function test_delivery_order_rejects_cogs_account_from_another_company(): void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Company A Context
+        |--------------------------------------------------------------------------
+        */
+
+        $companyAId =
+            (int) $this->data['company_id'];
+
+        $item =
+            Item::query()
+                ->findOrFail(
+                    $this->data['item_id']
+                );
+
+        $category =
+            DB::table('item_categories')
+                ->where(
+                    'id',
+                    $item->item_category_id
+                )
+                ->first();
+
+        $this->assertNotNull(
+            $category
+        );
+
+        $this->assertSame(
+            $companyAId,
+            (int) $category->company_id
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyBId =
+            DB::table('companies')
+                ->insertGetId([
+                    'code' =>
+                        'COMP-DO-COGS-B',
+
+                    'name' =>
+                        'Company B DO COGS Attack',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        $this->assertNotSame(
+            $companyAId,
+            (int) $companyBId
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Company B Expense Group
+        |--------------------------------------------------------------------------
+        */
+
+        $expenseGroupBId =
+            DB::table('account_groups')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'code' =>
+                        'EXP-DO-B',
+
+                    'name' =>
+                        'Expense Company B DO Attack',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Company B COGS Account
+        |--------------------------------------------------------------------------
+        */
+
+        $cogsAccountBId =
+            DB::table('accounts')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'account_group_id' =>
+                        $expenseGroupBId,
+
+                    'code' =>
+                        '5001-DO-B',
+
+                    'name' =>
+                        'COGS Company B DO Attack',
+
+                    'normal_balance' =>
+                        'DEBIT',
+
+                    'is_header' =>
+                        false,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Poison Category A
+        |--------------------------------------------------------------------------
+        |
+        | Inventory account tetap valid milik Company A.
+        | Hanya COGS account yang diarahkan ke Company B.
+        |
+        | Ini penting supaya eksekusi berhasil melewati inventory-account
+        | guard dan benar-benar mencapai COGS-account guard.
+        |
+        */
+
+        DB::table('item_categories')
+            ->where(
+                'id',
+                $item->item_category_id
+            )
+            ->update([
+                'cogs_account_id' =>
+                    $cogsAccountBId,
+
+                'updated_at' =>
+                    now(),
+            ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Sales Order Company A
+        |--------------------------------------------------------------------------
+        */
+
+        [
+            $salesOrder,
+            $salesOrderDetail,
+        ] =
+            $this->createSalesOrder(
+                qty: 10,
+                unitPrice: 10000,
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Capture Before Attack
+        |--------------------------------------------------------------------------
+        */
+
+        $deliveryOrderCountBefore =
+            DeliveryOrder::query()
+                ->count();
+
+        $deliveryOrderDetailCountBefore =
+            DeliveryOrderDetail::query()
+                ->count();
+
+        $stockLedgerCountBefore =
+            StockLedger::query()
+                ->count();
+
+        $journalCountBefore =
+            Journal::query()
+                ->count();
+
+        $salesOrderStatusBefore =
+            $salesOrder->status;
+
+        $salesOrderDetail->refresh();
+
+        $deliveredQtyBefore =
+            (float)
+            $salesOrderDetail->delivered_qty;
+
+        /*
+        |--------------------------------------------------------------------------
+        | Execute Attack
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+
+            app(DeliveryOrderService::class)
+                ->create(
+                    new DeliveryOrderDTO(
+                        salesOrderId:
+                            $salesOrder->id,
+
+                        remarks:
+                            'Cross-company COGS account attack',
+
+                        warehouseId:
+                            $this->data['warehouse_id'],
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        lines: [
+                            new DeliveryOrderLineDTO(
+                                itemId:
+                                    $this->data['item_id'],
+
+                                qty:
+                                    10,
+
+                                salesOrderDetailId:
+                                    $salesOrderDetail->id,
+
+                                remarks:
+                                    'Cross-company COGS attack',
+                            ),
+                        ],
+
+                        deliveryDate:
+                            '2026-08-08',
+                    )
+                );
+
+            $this->fail(
+                'Delivery Order must reject a COGS account from another company.'
+            );
+
+        } catch (RuntimeException $exception) {
+
+            $this->assertSame(
+                sprintf(
+                    'COGS account does not belong to company %d.',
+                    $companyAId
+                ),
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Transaction Must Fully Roll Back
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $deliveryOrderCountBefore,
+            DeliveryOrder::query()
+                ->count()
+        );
+
+        $this->assertSame(
+            $deliveryOrderDetailCountBefore,
+            DeliveryOrderDetail::query()
+                ->count()
+        );
+
+        $this->assertSame(
+            $stockLedgerCountBefore,
+            StockLedger::query()
+                ->count()
+        );
+
+        $this->assertSame(
+            $journalCountBefore,
+            Journal::query()
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Sales Order Must Remain Unchanged
+        |--------------------------------------------------------------------------
+        */
+
+        $salesOrder->refresh();
+        $salesOrderDetail->refresh();
+
+        $this->assertSame(
+            $salesOrderStatusBefore,
+            $salesOrder->status
+        );
+
+        $this->assertEqualsWithDelta(
+            $deliveredQtyBefore,
+            (float)
+            $salesOrderDetail->delivered_qty,
+            0.0001
+        );
+    }
+
+    public function test_delivery_order_rejects_item_from_another_company():
+        void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Arrange - Normal Company A Sales Order
+        |--------------------------------------------------------------------------
+        */
+
+        [$salesOrder, $salesOrderDetail] =
+            $this->createSalesOrder(
+                qty: 20,
+                unitPrice: 10000
+            );
+
+        $itemA =
+            Item::query()
+                ->findOrFail(
+                    $this->data['item_id']
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Arrange - Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyB =
+            Company::query()
+                ->create([
+                    'code' =>
+                        'COMP-DO-B',
+
+                    'name' =>
+                        'Delivery Order Company B',
+
+                    'phone' =>
+                        null,
+
+                    'email' =>
+                        null,
+
+                    'address' =>
+                        null,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        $categoryB =
+            ItemCategory::query()
+                ->create([
+                    'company_id' =>
+                        $companyB->id,
+
+                    'code' =>
+                        'CAT-DO-B',
+
+                    'name' =>
+                        'Delivery Order Category B',
+
+                    'description' =>
+                        'Cross-company DO item attack',
+
+                    'inventory_account_id' =>
+                        null,
+
+                    'cogs_account_id' =>
+                        null,
+
+                    'sales_account_id' =>
+                        null,
+
+                    'adjustment_gain_account_id' =>
+                        null,
+
+                    'adjustment_loss_account_id' =>
+                        null,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        $itemB =
+            Item::query()
+                ->create([
+                    'company_id' =>
+                        $companyB->id,
+
+                    'item_category_id' =>
+                        $categoryB->id,
+
+                    'uom_id' =>
+                        $itemA->uom_id,
+
+                    'code' =>
+                        'ITEM-DO-B',
+
+                    'name' =>
+                        'Delivery Order Item Company B',
+
+                    'description' =>
+                        'Must not enter Company A delivery order',
+
+                    'minimum_stock' =>
+                        0,
+
+                    'maximum_stock' =>
+                        0,
+
+                    'average_cost' =>
+                        0,
+
+                    'last_purchase_price' =>
+                        0,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Tamper Sales Order Detail
+        |--------------------------------------------------------------------------
+        |
+        | Sales Order tetap Company A tetapi detail sengaja diarahkan ke
+        | Item milik Company B.
+        |
+        */
+
+        $salesOrderDetail->update([
+            'item_id' =>
+                $itemB->id,
+        ]);
+
+        $salesOrderDetail->refresh();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Snapshot Before Attack
+        |--------------------------------------------------------------------------
+        */
+
+        $deliveryOrderCountBefore =
+            DeliveryOrder::query()
+                ->count();
+
+        $deliveryOrderDetailCountBefore =
+            DeliveryOrderDetail::query()
+                ->count();
+
+        $stockLedgerCountBefore =
+            StockLedger::query()
+                ->count();
+
+        $journalCountBefore =
+            Journal::query()
+                ->count();
+
+        $salesOrderStatusBefore =
+            $salesOrder->status;
+
+        $deliveredQtyBefore =
+            (float)
+            $salesOrderDetail->delivered_qty;
+
+        $sequenceBefore =
+            DocumentSequence::query()
+                ->where(
+                    'document_type',
+                    'DO'
+                )
+                ->value(
+                    'current_number'
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Execute Attack
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+
+            app(DeliveryOrderService::class)
+                ->create(
+                    new DeliveryOrderDTO(
+                        salesOrderId:
+                            $salesOrder->id,
+
+                        remarks:
+                            'Cross-company item attack',
+
+                        warehouseId:
+                            $this->data['warehouse_id'],
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        lines: [
+                            new DeliveryOrderLineDTO(
+                                itemId:
+                                    $itemB->id,
+
+                                qty:
+                                    10,
+
+                                salesOrderDetailId:
+                                    $salesOrderDetail->id,
+
+                                remarks:
+                                    'Cross-company item attack',
+                            ),
+                        ],
+
+                        deliveryDate:
+                            '2026-08-08',
+                    )
+                );
+
+            $this->fail(
+                'Delivery Order must reject an item from another company.'
+            );
+
+        } catch (RuntimeException $exception) {
+
+            $this->assertSame(
+                'Item does not belong to transaction company.',
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Attack Setup
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            (int) $this->data['company_id'],
+            (int) $salesOrder->company_id
+        );
+
+        $this->assertNotSame(
+            (int) $salesOrder->company_id,
+            (int) $itemB->company_id
+        );
+
+        $this->assertSame(
+            (int) $itemB->id,
+            (int) $salesOrderDetail->item_id
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Transaction Fully Rolled Back
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $deliveryOrderCountBefore,
+            DeliveryOrder::query()
+                ->count()
+        );
+
+        $this->assertSame(
+            $deliveryOrderDetailCountBefore,
+            DeliveryOrderDetail::query()
+                ->count()
+        );
+
+        $this->assertSame(
+            $stockLedgerCountBefore,
+            StockLedger::query()
+                ->count()
+        );
+
+        $this->assertSame(
+            $journalCountBefore,
+            Journal::query()
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Sales Order Unchanged
+        |--------------------------------------------------------------------------
+        */
+
+        $salesOrder->refresh();
+        $salesOrderDetail->refresh();
+
+        $this->assertSame(
+            $salesOrderStatusBefore,
+            $salesOrder->status
+        );
+
+        $this->assertEqualsWithDelta(
+            $deliveredQtyBefore,
+            (float) $salesOrderDetail->delivered_qty,
+            0.0001
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Document Sequence Rolled Back
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $sequenceBefore,
+            DocumentSequence::query()
+                ->where(
+                    'document_type',
+                    'DO'
+                )
+                ->value(
+                    'current_number'
+                )
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Foreign Item Never Reaches DO Detail
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertDatabaseMissing(
+            'delivery_order_details',
+            [
+                'item_id' =>
+                    $itemB->id,
+            ]
         );
     }
 

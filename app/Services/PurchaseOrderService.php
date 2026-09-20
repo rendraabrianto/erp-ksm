@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\DTO\PurchaseOrderDTO;
+use App\Models\Item;
 use App\Models\PurchaseOrderDetail;
 use App\Models\PurchaseRequest;
 use App\Models\User;
@@ -106,12 +107,42 @@ class PurchaseOrderService
                     $dto->lines
                     as $line
                 ) {
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Item Company Ownership
+                    |--------------------------------------------------------------------------
+                    |
+                    | Purchase Order wajib hanya berisi Item milik company PO.
+                    |
+                    | Untuk PO dari Purchase Request, company berasal dari parent PR.
+                    | Untuk PO manual, company berasal dari creator.
+                    |
+                    */
+
+                    $item =
+                        Item::query()
+                            ->whereKey(
+                                $line->itemId
+                            )
+                            ->firstOrFail();
+
+                    if (
+                        (int) $item->company_id
+                        !==
+                        $companyId
+                    ) {
+                        throw new \RuntimeException(
+                            'Item does not belong to transaction company.'
+                        );
+                    }
+
                     PurchaseOrderDetail::create([
                         'purchase_order_id' =>
                             $po->id,
 
                         'item_id' =>
-                            $line->itemId,
+                            $item->id,
 
                         'qty' =>
                             $line->qty,

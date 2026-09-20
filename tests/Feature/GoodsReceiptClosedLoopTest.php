@@ -18,6 +18,9 @@ use Tests\Support\InventoryReconciliationTestData;
 use Tests\TestCase;
 use App\Models\Journal;
 use App\Models\StockLedger;
+use App\Models\Company;
+use App\Models\DocumentSequence;
+use App\Models\ItemCategory;
 
 class GoodsReceiptClosedLoopTest extends TestCase
 {
@@ -1510,7 +1513,14 @@ class GoodsReceiptClosedLoopTest extends TestCase
 
         $liabilityGroupId =
             DB::table('account_groups')
-                ->where('code', 'LIA-T')
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
+                    'code',
+                    'LIA-T'
+                )
                 ->value('id');
 
         $this->assertNotNull(
@@ -1520,6 +1530,9 @@ class GoodsReceiptClosedLoopTest extends TestCase
         $alternativeGrniAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $liabilityGroupId,
 
@@ -1929,6 +1942,696 @@ class GoodsReceiptClosedLoopTest extends TestCase
             (float)
             $itemAfter->last_purchase_price,
             0.01
+        );
+    }
+
+    public function test_goods_receipt_rejects_inventory_account_from_another_company(): void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Company A
+        |--------------------------------------------------------------------------
+        |
+        | Purchase Order, warehouse, item, dan category fixture semuanya
+        | dimiliki Company A.
+        |
+        */
+
+        $companyAId =
+            (int) $this->data['company_id'];
+
+        $item =
+            Item::query()
+                ->findOrFail(
+                    $this->data['item_id']
+                );
+
+        $category =
+            DB::table('item_categories')
+                ->where(
+                    'id',
+                    $item->item_category_id
+                )
+                ->first();
+
+        $this->assertNotNull(
+            $category
+        );
+
+        $this->assertSame(
+            $companyAId,
+            (int) $category->company_id
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Create Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyBId =
+            DB::table('companies')
+                ->insertGetId([
+                    'code' =>
+                        'COMP-GR-B',
+
+                    'name' =>
+                        'Company B GR Attack Test',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        $this->assertNotSame(
+            $companyAId,
+            (int) $companyBId
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Company B Account Group
+        |--------------------------------------------------------------------------
+        */
+
+        $assetGroupBId =
+            DB::table('account_groups')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'code' =>
+                        'AST-GR-B',
+
+                    'name' =>
+                        'Asset Company B GR Attack',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Company B Inventory Account
+        |--------------------------------------------------------------------------
+        */
+
+        $inventoryAccountBId =
+            DB::table('accounts')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'account_group_id' =>
+                        $assetGroupBId,
+
+                    'code' =>
+                        '1201-GR-B',
+
+                    'name' =>
+                        'Inventory Company B GR Attack',
+
+                    'normal_balance' =>
+                        'DEBIT',
+
+                    'is_header' =>
+                        false,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Attack
+        |--------------------------------------------------------------------------
+        |
+        | Category tetap milik Company A.
+        |
+        | Tetapi inventory_account_id sengaja diarahkan ke account
+        | milik Company B.
+        |
+        */
+
+        DB::table('item_categories')
+            ->where(
+                'id',
+                $item->item_category_id
+            )
+            ->update([
+                'inventory_account_id' =>
+                    $inventoryAccountBId,
+
+                'updated_at' =>
+                    now(),
+            ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Purchase Order Company A
+        |--------------------------------------------------------------------------
+        */
+
+        [
+            $purchaseOrder,
+            $purchaseOrderDetail,
+        ] =
+            $this->createPurchaseOrder(
+                qty: 10,
+                unitPrice: 8000,
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Capture State Before Attack
+        |--------------------------------------------------------------------------
+        */
+
+        $goodsReceiptCountBefore =
+            DB::table('goods_receipts')
+                ->count();
+
+        $goodsReceiptDetailCountBefore =
+            DB::table('goods_receipt_details')
+                ->count();
+
+        $stockLedgerCountBefore =
+            DB::table('stock_ledgers')
+                ->count();
+
+        $journalCountBefore =
+            DB::table('journals')
+                ->count();
+
+        $purchaseOrderDetail->refresh();
+
+        $receivedQtyBefore =
+            (float)
+            $purchaseOrderDetail->received_qty;
+
+        $item->refresh();
+
+        $lastPurchasePriceBefore =
+            (float)
+            $item->last_purchase_price;
+
+        /*
+        |--------------------------------------------------------------------------
+        | Execute Attack
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+
+            app(GoodsReceiptService::class)
+                ->create(
+                    new GoodsReceiptDTO(
+                        purchaseOrderId:
+                            $purchaseOrder->id,
+
+                        supplierName:
+                            $purchaseOrder->supplier_name,
+
+                        remarks:
+                            'Cross-company inventory account attack',
+
+                        warehouseId:
+                            $this->data['warehouse_id'],
+
+                        createdBy:
+                            $this->data['user_id'],
+
+                        lines: [
+                            new GoodsReceiptLineDTO(
+                                itemId:
+                                    $this->data['item_id'],
+
+                                qty:
+                                    10,
+
+                                unitPrice:
+                                    8000,
+
+                                purchaseOrderDetailId:
+                                    $purchaseOrderDetail->id,
+
+                                remarks:
+                                    'Cross-company account attack',
+                            ),
+                        ],
+
+                        receiptDate:
+                            '2026-08-08',
+                    )
+                );
+
+            $this->fail(
+                'Goods Receipt must reject an inventory account from another company.'
+            );
+
+        } catch (RuntimeException $exception) {
+
+            $this->assertSame(
+                sprintf(
+                    'Inventory account does not belong to company %d.',
+                    $companyAId
+                ),
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | No Goods Receipt Must Survive
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $goodsReceiptCountBefore,
+            DB::table('goods_receipts')
+                ->count()
+        );
+
+        $this->assertSame(
+            $goodsReceiptDetailCountBefore,
+            DB::table('goods_receipt_details')
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | No Inventory Movement
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $stockLedgerCountBefore,
+            DB::table('stock_ledgers')
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | No Accounting Journal
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $journalCountBefore,
+            DB::table('journals')
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Purchase Order Must Remain Unchanged
+        |--------------------------------------------------------------------------
+        */
+
+        $purchaseOrderDetail->refresh();
+
+        $this->assertEqualsWithDelta(
+            $receivedQtyBefore,
+            (float)
+            $purchaseOrderDetail->received_qty,
+            0.0001
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Item Informational Cost Must Remain Unchanged
+        |--------------------------------------------------------------------------
+        */
+
+        $item->refresh();
+
+        $this->assertEqualsWithDelta(
+            $lastPurchasePriceBefore,
+            (float)
+            $item->last_purchase_price,
+            0.01
+        );
+    }
+
+    public function test_goods_receipt_rejects_item_from_another_company():
+        void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Arrange - Normal Company A Purchase Order
+        |--------------------------------------------------------------------------
+        */
+
+        [$purchaseOrder, $purchaseOrderDetail] =
+            $this->createPurchaseOrder(
+                qty: 20,
+                unitPrice: 8000
+            );
+
+        $itemA =
+            Item::query()
+                ->findOrFail(
+                    $this->data['item_id']
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Arrange - Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyB =
+            Company::query()
+                ->create([
+                    'code' =>
+                        'COMP-GR-B',
+
+                    'name' =>
+                        'Goods Receipt Company B',
+
+                    'phone' =>
+                        null,
+
+                    'email' =>
+                        null,
+
+                    'address' =>
+                        null,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        $categoryB =
+            ItemCategory::query()
+                ->create([
+                    'company_id' =>
+                        $companyB->id,
+
+                    'code' =>
+                        'CAT-GR-B',
+
+                    'name' =>
+                        'Goods Receipt Category B',
+
+                    'description' =>
+                        'Cross-company GR item attack',
+
+                    'inventory_account_id' =>
+                        null,
+
+                    'cogs_account_id' =>
+                        null,
+
+                    'sales_account_id' =>
+                        null,
+
+                    'adjustment_gain_account_id' =>
+                        null,
+
+                    'adjustment_loss_account_id' =>
+                        null,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        $itemB =
+            Item::query()
+                ->create([
+                    'company_id' =>
+                        $companyB->id,
+
+                    'item_category_id' =>
+                        $categoryB->id,
+
+                    'uom_id' =>
+                        $itemA->uom_id,
+
+                    'code' =>
+                        'ITEM-GR-B',
+
+                    'name' =>
+                        'Goods Receipt Item Company B',
+
+                    'description' =>
+                        'Must not enter Company A goods receipt',
+
+                    'minimum_stock' =>
+                        0,
+
+                    'maximum_stock' =>
+                        0,
+
+                    'average_cost' =>
+                        0,
+
+                    'last_purchase_price' =>
+                        0,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Tamper PO Detail
+        |--------------------------------------------------------------------------
+        |
+        | Purchase Order tetap milik Company A, tetapi detail sengaja diarahkan
+        | ke Item milik Company B.
+        |
+        */
+
+        $purchaseOrderDetail->update([
+            'item_id' =>
+                $itemB->id,
+        ]);
+
+        $purchaseOrderDetail->refresh();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Snapshot Before Attack
+        |--------------------------------------------------------------------------
+        */
+
+        $goodsReceiptCountBefore =
+            DB::table('goods_receipts')
+                ->count();
+
+        $goodsReceiptDetailCountBefore =
+            DB::table('goods_receipt_details')
+                ->count();
+
+        $stockLedgerCountBefore =
+            StockLedger::query()
+                ->count();
+
+        $journalCountBefore =
+            Journal::query()
+                ->count();
+
+        $receivedQtyBefore =
+            (float)
+            $purchaseOrderDetail->received_qty;
+
+        $sequenceBefore =
+            DocumentSequence::query()
+                ->where(
+                    'document_type',
+                    'GR'
+                )
+                ->value(
+                    'current_number'
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Act
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+            app(
+                GoodsReceiptService::class
+            )->create(
+                new GoodsReceiptDTO(
+                    purchaseOrderId:
+                        $purchaseOrder->id,
+
+                    supplierName:
+                        $purchaseOrder->supplier_name,
+
+                    remarks:
+                        'Cross-company item attack',
+
+                    warehouseId:
+                        $this->data['warehouse_id'],
+
+                    createdBy:
+                        $this->data['user_id'],
+
+                    lines: [
+                        new GoodsReceiptLineDTO(
+                            itemId:
+                                $itemB->id,
+
+                            qty:
+                                10,
+
+                            unitPrice:
+                                8000,
+
+                            purchaseOrderDetailId:
+                                $purchaseOrderDetail->id,
+
+                            remarks:
+                                'Cross-company item attack',
+                        ),
+                    ],
+
+                    receiptDate:
+                        '2026-08-08',
+                )
+            );
+
+            $this->fail(
+                'Goods Receipt must reject an item from another company.'
+            );
+
+        } catch (RuntimeException $exception) {
+
+            $this->assertSame(
+                'Item does not belong to transaction company.',
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Attack Setup
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            (int) $this->data['company_id'],
+            (int) $purchaseOrder->company_id
+        );
+
+        $this->assertNotSame(
+            (int) $purchaseOrder->company_id,
+            (int) $itemB->company_id
+        );
+
+        $this->assertSame(
+            (int) $itemB->id,
+            (int) $purchaseOrderDetail->item_id
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - No Goods Receipt Survives
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $goodsReceiptCountBefore,
+            DB::table('goods_receipts')
+                ->count()
+        );
+
+        $this->assertSame(
+            $goodsReceiptDetailCountBefore,
+            DB::table('goods_receipt_details')
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - No Inventory Movement
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $stockLedgerCountBefore,
+            StockLedger::query()
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - No Accounting Journal
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $journalCountBefore,
+            Journal::query()
+                ->count()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - PO Detail Unchanged
+        |--------------------------------------------------------------------------
+        */
+
+        $purchaseOrderDetail->refresh();
+
+        $this->assertEqualsWithDelta(
+            $receivedQtyBefore,
+            (float) $purchaseOrderDetail->received_qty,
+            0.0001
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Document Sequence Rolled Back
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $sequenceBefore,
+            DocumentSequence::query()
+                ->where(
+                    'document_type',
+                    'GR'
+                )
+                ->value(
+                    'current_number'
+                )
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - No GR Detail For Foreign Item
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertDatabaseMissing(
+            'goods_receipt_details',
+            [
+                'item_id' =>
+                    $itemB->id,
+            ]
         );
     }
 

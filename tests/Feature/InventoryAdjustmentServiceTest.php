@@ -13,6 +13,9 @@ use App\Models\Account;
 use App\Models\DocumentSequence;
 use App\Models\ItemCategory;
 use Tests\TestCase;
+use App\Models\Company;
+use App\Models\Item;
+use App\Models\StockLedger;
 
 class InventoryAdjustmentServiceTest extends TestCase
 {
@@ -20,9 +23,8 @@ class InventoryAdjustmentServiceTest extends TestCase
 
     private array $data;
     private int $gainAccountId;
-    private int $lossAccountId; 
+    private int $lossAccountId;
 
-    
     protected function setUp(): void
     {
         parent::setUp();
@@ -42,6 +44,10 @@ class InventoryAdjustmentServiceTest extends TestCase
 
         $existingAccount =
             Account::query()
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->firstOrFail();
 
         /*
@@ -53,7 +59,11 @@ class InventoryAdjustmentServiceTest extends TestCase
         $gainAccount =
             Account::firstOrCreate(
                 [
-                    'code' => '4901',
+                    'company_id' =>
+                        $this->data['company_id'],
+
+                    'code' =>
+                        '4901',
                 ],
                 [
                     'account_group_id' =>
@@ -83,7 +93,11 @@ class InventoryAdjustmentServiceTest extends TestCase
         $lossAccount =
             Account::firstOrCreate(
                 [
-                    'code' => '6901',
+                    'company_id' =>
+                        $this->data['company_id'],
+
+                    'code' =>
+                        '6901',
                 ],
                 [
                     'account_group_id' =>
@@ -967,7 +981,7 @@ class InventoryAdjustmentServiceTest extends TestCase
             (float) $gainLine->credit
         );
     }
-    
+
     public function test_post_rolls_back_entire_adjustment_when_journal_posting_fails():
         void
     {
@@ -1209,6 +1223,1009 @@ class InventoryAdjustmentServiceTest extends TestCase
         $this->assertEquals(
             18000.0,
             $detail->total_cost
+        );
+    }
+
+    public function test_adjustment_rejects_inventory_account_from_another_company():
+        void
+    {
+        $companyAId =
+            (int) $this->data['company_id'];
+
+        $item =
+            \App\Models\Item::findOrFail(
+                $this->data['item_id']
+            );
+
+        $category =
+            ItemCategory::findOrFail(
+                $item->item_category_id
+            );
+
+        $this->assertSame(
+            $companyAId,
+            (int) $category->company_id
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyBId =
+            \DB::table('companies')
+                ->insertGetId([
+                    'code' =>
+                        'COMP-ADJ-B1',
+
+                    'name' =>
+                        'Company B Adjustment Inventory Attack',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        $groupBId =
+            \DB::table('account_groups')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'code' =>
+                        'AST-ADJB',
+
+                    'name' =>
+                        'Asset Company B Adjustment',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        $inventoryAccountBId =
+            \DB::table('accounts')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'account_group_id' =>
+                        $groupBId,
+
+                    'code' =>
+                        '1298-ADJB',
+
+                    'name' =>
+                        'Inventory Company B Adjustment',
+
+                    'normal_balance' =>
+                        'DEBIT',
+
+                    'is_header' =>
+                        false,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Poison Only Inventory Mapping
+        |--------------------------------------------------------------------------
+        */
+
+        ItemCategory::query()
+            ->whereKey($category->id)
+            ->update([
+                'inventory_account_id' =>
+                    $inventoryAccountBId,
+            ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Create DRAFT
+        |--------------------------------------------------------------------------
+        */
+
+        $service =
+            app(
+                InventoryAdjustmentService::class
+            );
+
+        $adjustment =
+            $service->create(
+                new InventoryAdjustmentCreateDTO(
+                    warehouseId:
+                        $this->data['warehouse_id'],
+
+                    adjustmentDate:
+                        '2026-08-23',
+
+                    reason:
+                        'STOCK_OPNAME',
+
+                    remarks:
+                        'Cross-company inventory account attack',
+
+                    createdBy:
+                        $this->data['user_id'],
+
+                    details: [
+                        [
+                            'item_id' =>
+                                $this->data['item_id'],
+
+                            'physical_qty' =>
+                                170.0,
+                        ],
+                    ],
+                )
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Capture State Before POST
+        |--------------------------------------------------------------------------
+        */
+
+        $ledgerCountBefore =
+            \App\Models\StockLedger::count();
+
+        $journalCountBefore =
+            \App\Models\Journal::count();
+
+        /*
+        |--------------------------------------------------------------------------
+        | POST Must Be Rejected
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+
+            $service->post(
+                $adjustment->id,
+                $this->data['user_id']
+            );
+
+            $this->fail(
+                'Adjustment must reject an inventory account from another company.'
+            );
+
+        } catch (\RuntimeException $exception) {
+
+            $this->assertSame(
+                sprintf(
+                    'Inventory account does not belong to company %d.',
+                    $companyAId
+                ),
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Adjustment Must Remain DRAFT
+        |--------------------------------------------------------------------------
+        */
+
+        $adjustment->refresh();
+
+        $this->assertSame(
+            'DRAFT',
+            $adjustment->status
+        );
+
+        $this->assertNull(
+            $adjustment->posted_by
+        );
+
+        $this->assertNull(
+            $adjustment->posted_at
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | No Inventory / Accounting Side Effects
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $ledgerCountBefore,
+            \App\Models\StockLedger::count()
+        );
+
+        $this->assertSame(
+            $journalCountBefore,
+            \App\Models\Journal::count()
+        );
+
+        $this->assertDatabaseMissing(
+            'stock_ledgers',
+            [
+                'reference_type' =>
+                    'INVENTORY_ADJUSTMENT',
+
+                'reference_id' =>
+                    $adjustment->id,
+            ]
+        );
+
+        $this->assertDatabaseMissing(
+            'journals',
+            [
+                'reference_type' =>
+                    'INVENTORY_ADJUSTMENT',
+
+                'reference_id' =>
+                    $adjustment->id,
+            ]
+        );
+    }
+
+    public function test_adjustment_rejects_gain_account_from_another_company():
+        void
+    {
+        $companyAId =
+            (int) $this->data['company_id'];
+
+        $item =
+            \App\Models\Item::findOrFail(
+                $this->data['item_id']
+            );
+
+        $category =
+            ItemCategory::findOrFail(
+                $item->item_category_id
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyBId =
+            \DB::table('companies')
+                ->insertGetId([
+                    'code' =>
+                        'COMP-ADJ-B2',
+
+                    'name' =>
+                        'Company B Adjustment Gain Attack',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        $groupBId =
+            \DB::table('account_groups')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'code' =>
+                        'REV-ADJB',
+
+                    'name' =>
+                        'Revenue Company B Adjustment',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        $gainAccountBId =
+            \DB::table('accounts')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'account_group_id' =>
+                        $groupBId,
+
+                    'code' =>
+                        '4998-ADJB',
+
+                    'name' =>
+                        'Adjustment Gain Company B',
+
+                    'normal_balance' =>
+                        'CREDIT',
+
+                    'is_header' =>
+                        false,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Poison Only Gain Mapping
+        |--------------------------------------------------------------------------
+        |
+        | Inventory tetap valid Company A.
+        | Loss tetap valid Company A.
+        |
+        */
+
+        ItemCategory::query()
+            ->whereKey($category->id)
+            ->update([
+                'adjustment_gain_account_id' =>
+                    $gainAccountBId,
+            ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Positive Adjustment
+        |--------------------------------------------------------------------------
+        |
+        | Current Qty = 173
+        | Physical    = 176
+        | Difference  = +3
+        |
+        */
+
+        $service =
+            app(
+                InventoryAdjustmentService::class
+            );
+
+        $adjustment =
+            $service->create(
+                new InventoryAdjustmentCreateDTO(
+                    warehouseId:
+                        $this->data['warehouse_id'],
+
+                    adjustmentDate:
+                        '2026-08-23',
+
+                    reason:
+                        'STOCK_OPNAME',
+
+                    remarks:
+                        'Cross-company gain account attack',
+
+                    createdBy:
+                        $this->data['user_id'],
+
+                    details: [
+                        [
+                            'item_id' =>
+                                $this->data['item_id'],
+
+                            'physical_qty' =>
+                                176.0,
+                        ],
+                    ],
+                )
+            );
+
+        $ledgerCountBefore =
+            \App\Models\StockLedger::count();
+
+        $journalCountBefore =
+            \App\Models\Journal::count();
+
+        /*
+        |--------------------------------------------------------------------------
+        | POST Must Be Rejected
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+
+            $service->post(
+                $adjustment->id,
+                $this->data['user_id']
+            );
+
+            $this->fail(
+                'Adjustment must reject a gain account from another company.'
+            );
+
+        } catch (\RuntimeException $exception) {
+
+            $this->assertSame(
+                sprintf(
+                    'Adjustment gain account does not belong to company %d.',
+                    $companyAId
+                ),
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Full Rollback
+        |--------------------------------------------------------------------------
+        */
+
+        $adjustment->refresh();
+
+        $this->assertSame(
+            'DRAFT',
+            $adjustment->status
+        );
+
+        $this->assertNull(
+            $adjustment->posted_by
+        );
+
+        $this->assertNull(
+            $adjustment->posted_at
+        );
+
+        $this->assertSame(
+            $ledgerCountBefore,
+            \App\Models\StockLedger::count()
+        );
+
+        $this->assertSame(
+            $journalCountBefore,
+            \App\Models\Journal::count()
+        );
+
+        $this->assertDatabaseMissing(
+            'stock_ledgers',
+            [
+                'reference_type' =>
+                    'INVENTORY_ADJUSTMENT',
+
+                'reference_id' =>
+                    $adjustment->id,
+            ]
+        );
+
+        $this->assertDatabaseMissing(
+            'journals',
+            [
+                'reference_type' =>
+                    'INVENTORY_ADJUSTMENT',
+
+                'reference_id' =>
+                    $adjustment->id,
+            ]
+        );
+    }
+
+    public function test_adjustment_rejects_loss_account_from_another_company():
+        void
+    {
+        $companyAId =
+            (int) $this->data['company_id'];
+
+        $item =
+            \App\Models\Item::findOrFail(
+                $this->data['item_id']
+            );
+
+        $category =
+            ItemCategory::findOrFail(
+                $item->item_category_id
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyBId =
+            \DB::table('companies')
+                ->insertGetId([
+                    'code' =>
+                        'COMP-ADJ-B3',
+
+                    'name' =>
+                        'Company B Adjustment Loss Attack',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        $groupBId =
+            \DB::table('account_groups')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'code' =>
+                        'EXP-ADJB',
+
+                    'name' =>
+                        'Expense Company B Adjustment',
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        $lossAccountBId =
+            \DB::table('accounts')
+                ->insertGetId([
+                    'company_id' =>
+                        $companyBId,
+
+                    'account_group_id' =>
+                        $groupBId,
+
+                    'code' =>
+                        '6998-ADJB',
+
+                    'name' =>
+                        'Adjustment Loss Company B',
+
+                    'normal_balance' =>
+                        'DEBIT',
+
+                    'is_header' =>
+                        false,
+
+                    'is_active' =>
+                        true,
+
+                    'created_at' =>
+                        now(),
+
+                    'updated_at' =>
+                        now(),
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Poison Only Loss Mapping
+        |--------------------------------------------------------------------------
+        |
+        | Inventory tetap valid Company A.
+        | Gain tetap valid Company A.
+        |
+        */
+
+        ItemCategory::query()
+            ->whereKey($category->id)
+            ->update([
+                'adjustment_loss_account_id' =>
+                    $lossAccountBId,
+            ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Negative Adjustment
+        |--------------------------------------------------------------------------
+        |
+        | Current Qty = 173
+        | Physical    = 170
+        | Difference  = -3
+        |
+        */
+
+        $service =
+            app(
+                InventoryAdjustmentService::class
+            );
+
+        $adjustment =
+            $service->create(
+                new InventoryAdjustmentCreateDTO(
+                    warehouseId:
+                        $this->data['warehouse_id'],
+
+                    adjustmentDate:
+                        '2026-08-23',
+
+                    reason:
+                        'STOCK_OPNAME',
+
+                    remarks:
+                        'Cross-company loss account attack',
+
+                    createdBy:
+                        $this->data['user_id'],
+
+                    details: [
+                        [
+                            'item_id' =>
+                                $this->data['item_id'],
+
+                            'physical_qty' =>
+                                170.0,
+                        ],
+                    ],
+                )
+            );
+
+        $ledgerCountBefore =
+            \App\Models\StockLedger::count();
+
+        $journalCountBefore =
+            \App\Models\Journal::count();
+
+        /*
+        |--------------------------------------------------------------------------
+        | POST Must Be Rejected
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+
+            $service->post(
+                $adjustment->id,
+                $this->data['user_id']
+            );
+
+            $this->fail(
+                'Adjustment must reject a loss account from another company.'
+            );
+
+        } catch (\RuntimeException $exception) {
+
+            $this->assertSame(
+                sprintf(
+                    'Adjustment loss account does not belong to company %d.',
+                    $companyAId
+                ),
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Full Rollback
+        |--------------------------------------------------------------------------
+        */
+
+        $adjustment->refresh();
+
+        $this->assertSame(
+            'DRAFT',
+            $adjustment->status
+        );
+
+        $this->assertNull(
+            $adjustment->posted_by
+        );
+
+        $this->assertNull(
+            $adjustment->posted_at
+        );
+
+        $this->assertSame(
+            $ledgerCountBefore,
+            \App\Models\StockLedger::count()
+        );
+
+        $this->assertSame(
+            $journalCountBefore,
+            \App\Models\Journal::count()
+        );
+
+        $this->assertDatabaseMissing(
+            'stock_ledgers',
+            [
+                'reference_type' =>
+                    'INVENTORY_ADJUSTMENT',
+
+                'reference_id' =>
+                    $adjustment->id,
+            ]
+        );
+
+        $this->assertDatabaseMissing(
+            'journals',
+            [
+                'reference_type' =>
+                    'INVENTORY_ADJUSTMENT',
+
+                'reference_id' =>
+                    $adjustment->id,
+            ]
+        );
+    }
+
+    public function test_adjustment_rejects_item_from_another_company():
+        void
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Arrange - Company A
+        |--------------------------------------------------------------------------
+        */
+
+        $companyAId =
+            $this->data['company_id'];
+
+        $warehouseAId =
+            $this->data['warehouse_id'];
+
+        $itemA =
+            Item::query()
+                ->findOrFail(
+                    $this->data['item_id']
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Arrange - Company B
+        |--------------------------------------------------------------------------
+        */
+
+        $companyB =
+            Company::query()
+                ->create([
+                    'code' =>
+                        'COMP-ADJ-B',
+
+                    'name' =>
+                        'Adjustment Company B',
+
+                    'phone' =>
+                        null,
+
+                    'email' =>
+                        null,
+
+                    'address' =>
+                        null,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        $categoryB =
+            ItemCategory::query()
+                ->create([
+                    'company_id' =>
+                        $companyB->id,
+
+                    'code' =>
+                        'CAT-ADJ-B',
+
+                    'name' =>
+                        'Adjustment Category B',
+
+                    'description' =>
+                        'Cross-company adjustment attack test',
+
+                    'is_active' =>
+                        true,
+
+                    'inventory_account_id' =>
+                        null,
+
+                    'cogs_account_id' =>
+                        null,
+
+                    'sales_account_id' =>
+                        null,
+
+                    'adjustment_gain_account_id' =>
+                        null,
+
+                    'adjustment_loss_account_id' =>
+                        null,
+                ]);
+
+        $itemB =
+            Item::query()
+                ->create([
+                    'company_id' =>
+                        $companyB->id,
+
+                    'item_category_id' =>
+                        $categoryB->id,
+
+                    'uom_id' =>
+                        $itemA->uom_id,
+
+                    'code' =>
+                        'ITEM-ADJ-B',
+
+                    'name' =>
+                        'Adjustment Item Company B',
+
+                    'description' =>
+                        'Must not enter Company A adjustment',
+
+                    'minimum_stock' =>
+                        0,
+
+                    'maximum_stock' =>
+                        0,
+
+                    'average_cost' =>
+                        0,
+
+                    'last_purchase_price' =>
+                        0,
+
+                    'is_active' =>
+                        true,
+                ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Snapshot Before Attack
+        |--------------------------------------------------------------------------
+        */
+
+        $adjustmentCountBefore =
+            InventoryAdjustment::query()
+                ->count();
+
+        $detailCountBefore =
+            InventoryAdjustmentDetail::query()
+                ->count();
+
+        $ledgerCountBefore =
+            StockLedger::query()
+                ->count();
+
+        $sequenceBefore =
+            DocumentSequence::query()
+                ->where(
+                    'document_type',
+                    'ADJ'
+                )
+                ->value(
+                    'current_number'
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Act
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+            app(
+                InventoryAdjustmentService::class
+            )->create(
+                new InventoryAdjustmentCreateDTO(
+                    warehouseId:
+                        $warehouseAId,
+
+                    adjustmentDate:
+                        '2026-08-23',
+
+                    reason:
+                        'STOCK_OPNAME',
+
+                    remarks:
+                        'Cross-company item attack',
+
+                    createdBy:
+                        $this->data['user_id'],
+
+                    details: [
+                        [
+                            'item_id' =>
+                                $itemB->id,
+
+                            'physical_qty' =>
+                                10.0,
+
+                            'remarks' =>
+                                'Must be rejected',
+                        ],
+                    ],
+                )
+            );
+
+            $this->fail(
+                'Expected cross-company adjustment item to be rejected.'
+            );
+        } catch (\RuntimeException $exception) {
+            $this->assertSame(
+                'Item does not belong to transaction company.',
+                $exception->getMessage()
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Ownership
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $companyAId,
+            (int) $this->data['company_id']
+        );
+
+        $this->assertNotSame(
+            $companyAId,
+            (int) $itemB->company_id
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Assert - Full Rollback
+        |--------------------------------------------------------------------------
+        */
+
+        $this->assertSame(
+            $adjustmentCountBefore,
+            InventoryAdjustment::query()
+                ->count()
+        );
+
+        $this->assertSame(
+            $detailCountBefore,
+            InventoryAdjustmentDetail::query()
+                ->count()
+        );
+
+        $this->assertSame(
+            $ledgerCountBefore,
+            StockLedger::query()
+                ->count()
+        );
+
+        $this->assertSame(
+            $sequenceBefore,
+            DocumentSequence::query()
+                ->where(
+                    'document_type',
+                    'ADJ'
+                )
+                ->value(
+                    'current_number'
+                )
+        );
+
+        $this->assertDatabaseMissing(
+            'inventory_adjustment_details',
+            [
+                'item_id' =>
+                    $itemB->id,
+            ]
         );
     }
 }
