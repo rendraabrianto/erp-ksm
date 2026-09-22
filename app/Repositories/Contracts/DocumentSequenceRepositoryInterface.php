@@ -6,7 +6,8 @@ use App\Models\DocumentSequence;
 
 interface DocumentSequenceRepositoryInterface
 {
-    public function findByType(
+    public function findByTypeForUpdate(
+        int $companyId,
         string $documentType
     ): ?DocumentSequence;
 

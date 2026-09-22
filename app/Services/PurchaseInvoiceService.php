@@ -82,7 +82,10 @@ class PurchaseInvoiceService
                         'invoice_no' =>
                             $this
                                 ->documentSequenceService
-                                ->next('INV'),
+                                ->next(
+                                    $companyId,
+                                    'INV'
+                                ),
 
                         'invoice_date' =>
                             now(),

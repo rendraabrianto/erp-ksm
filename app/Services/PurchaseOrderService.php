@@ -76,7 +76,10 @@ class PurchaseOrderService
                         'po_no' =>
                             $this
                                 ->documentSequenceService
-                                ->next('PO'),
+                                ->next(
+                                    $companyId,
+                                    'PO'
+                                ),
 
                         'purchase_request_id' =>
                             $dto->purchaseRequestId,

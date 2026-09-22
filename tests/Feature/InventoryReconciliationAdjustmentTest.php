@@ -391,6 +391,10 @@ class InventoryReconciliationAdjustmentTest extends TestCase
 
         $before = DB::table('document_sequences')
             ->where(
+                'company_id',
+                $this->data['company_id']
+            )
+            ->where(
                 'document_type',
                 'JV'
             )
@@ -402,6 +406,10 @@ class InventoryReconciliationAdjustmentTest extends TestCase
         );
 
         $after = DB::table('document_sequences')
+            ->where(
+                'company_id',
+                $this->data['company_id']
+            )
             ->where(
                 'document_type',
                 'JV'
@@ -447,6 +455,10 @@ class InventoryReconciliationAdjustmentTest extends TestCase
         $sequenceBefore =
             (int)
             DB::table('document_sequences')
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->where(
                     'document_type',
                     'JV'
@@ -620,6 +632,10 @@ class InventoryReconciliationAdjustmentTest extends TestCase
             (int)
             DB::table('document_sequences')
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'document_type',
                     'JV'
                 )
@@ -714,6 +730,10 @@ class InventoryReconciliationAdjustmentTest extends TestCase
         $sequenceBefore =
             (int)
             DB::table('document_sequences')
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->where(
                     'document_type',
                     'JV'
@@ -882,6 +902,10 @@ class InventoryReconciliationAdjustmentTest extends TestCase
         $sequenceAfter =
             (int)
             DB::table('document_sequences')
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->where(
                     'document_type',
                     'JV'

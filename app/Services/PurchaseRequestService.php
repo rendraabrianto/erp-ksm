@@ -68,7 +68,10 @@ class PurchaseRequestService
                         'pr_no' =>
                             $this
                                 ->documentSequenceService
-                                ->next('PR'),
+                                ->next(
+                                    $companyId,
+                                    'PR'
+                                ),
 
                         'pr_date' =>
                             now(),

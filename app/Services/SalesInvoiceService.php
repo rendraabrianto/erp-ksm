@@ -145,7 +145,10 @@ class SalesInvoiceService
                             'invoice_no' =>
                                 $this
                                     ->documentSequenceService
-                                    ->next('INV'),
+                                    ->next(
+                                        $companyId,
+                                        'INV'
+                                    ),
 
                             'customer_id' =>
                                 $customer->id,

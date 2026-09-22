@@ -32,6 +32,9 @@ class PaymentVoucherClosedLoopTest extends TestCase
         DB::table('document_sequences')
             ->updateOrInsert(
                 [
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'document_type' =>
                         'PV',
                 ],
@@ -44,6 +47,9 @@ class PaymentVoucherClosedLoopTest extends TestCase
 
                     'padding' =>
                         5,
+
+                    'is_active' =>
+                        true,
 
                     'created_at' =>
                         now(),
@@ -1115,6 +1121,10 @@ class PaymentVoucherClosedLoopTest extends TestCase
             (int)
             DB::table('document_sequences')
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'document_type',
                     'PV'
                 )
@@ -1203,6 +1213,10 @@ class PaymentVoucherClosedLoopTest extends TestCase
         $sequenceAfter =
             (int)
             DB::table('document_sequences')
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->where(
                     'document_type',
                     'PV'

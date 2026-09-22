@@ -41,6 +41,7 @@ class DeliveryOrderClosedLoopTest extends TestCase
             InventoryReconciliationTestData::create();
 
         $this->createDocumentSequence(
+            companyId: $this->data['company_id'],
             documentType: 'DO',
             prefix: 'DO'
         );
@@ -2460,6 +2461,10 @@ class DeliveryOrderClosedLoopTest extends TestCase
         $sequenceBefore =
             DocumentSequence::query()
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'document_type',
                     'DO'
                 )
@@ -2603,6 +2608,10 @@ class DeliveryOrderClosedLoopTest extends TestCase
         $this->assertSame(
             $sequenceBefore,
             DocumentSequence::query()
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->where(
                     'document_type',
                     'DO'
@@ -2756,6 +2765,7 @@ class DeliveryOrderClosedLoopTest extends TestCase
     }
 
     private function createDocumentSequence(
+        int $companyId,
         string $documentType,
         string $prefix
     ): void {
@@ -2763,6 +2773,9 @@ class DeliveryOrderClosedLoopTest extends TestCase
         DB::table(
             'document_sequences'
         )->insert([
+            'company_id' =>
+                $companyId,
+
             'document_type' =>
                 $documentType,
 

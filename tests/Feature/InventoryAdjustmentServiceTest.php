@@ -154,6 +154,8 @@ class InventoryAdjustmentServiceTest extends TestCase
 
         DocumentSequence::firstOrCreate(
             [
+                'company_id' =>
+                    $this->data['company_id'],
                 'document_type' => 'ADJ',
             ],
             [
@@ -2110,6 +2112,10 @@ class InventoryAdjustmentServiceTest extends TestCase
         $sequenceBefore =
             DocumentSequence::query()
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'document_type',
                     'ADJ'
                 )
@@ -2211,6 +2217,10 @@ class InventoryAdjustmentServiceTest extends TestCase
         $this->assertSame(
             $sequenceBefore,
             DocumentSequence::query()
+                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->where(
                     'document_type',
                     'ADJ'

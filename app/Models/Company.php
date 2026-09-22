@@ -69,4 +69,9 @@ class Company extends Model
             Customer::class
         );
     }
+
+    public function documentSequences(): HasMany
+    {
+        return $this->hasMany(DocumentSequence::class);
+    }
 }

@@ -164,7 +164,10 @@ class JournalPostingService
                             'journal_no' =>
                                 $this
                                     ->documentSequenceService
-                                    ->next('JV'),
+                                    ->next(
+                                        $entry->companyId,
+                                        'JV'
+                                    ),
 
                             'reference_type' =>
                                 $entry->referenceType,

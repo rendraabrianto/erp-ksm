@@ -142,7 +142,10 @@ class InventoryTransferService
                 $transferNo =
                     $this
                         ->documentSequenceService
-                        ->next('TRF');
+                        ->next(
+                            $companyId,
+                            'TRF'
+                        );
 
                 /*
                 |--------------------------------------------------------------------------

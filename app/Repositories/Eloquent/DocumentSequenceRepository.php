@@ -8,20 +8,26 @@ use App\Repositories\Contracts\DocumentSequenceRepositoryInterface;
 class DocumentSequenceRepository
 implements DocumentSequenceRepositoryInterface
 {
-    public function findByType(
+    public function findByTypeForUpdate(
+        int $companyId,
         string $documentType
-    ): ?DocumentSequence
-    {
-        return DocumentSequence::where(
-            'document_type',
-            $documentType
-        )->first();
+    ): ?DocumentSequence {
+        return DocumentSequence::query()
+            ->where(
+                'company_id',
+                $companyId
+            )
+            ->where(
+                'document_type',
+                $documentType
+            )
+            ->lockForUpdate()
+            ->first();
     }
 
     public function save(
         DocumentSequence $sequence
-    ): bool
-    {
+    ): bool {
         return $sequence->save();
     }
 }

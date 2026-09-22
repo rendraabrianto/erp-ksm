@@ -40,11 +40,13 @@ class SalesCycleCompanyOwnershipTest extends TestCase
             InventoryReconciliationTestData::create();
 
         $this->createDocumentSequence(
+            companyId: $this->data['company_id'],
             documentType: 'SO',
             prefix: 'SO'
         );
 
         $this->createDocumentSequence(
+            companyId: $this->data['company_id'],
             documentType: 'DO',
             prefix: 'DO'
         );
@@ -52,6 +54,8 @@ class SalesCycleCompanyOwnershipTest extends TestCase
         DB::table('document_sequences')
         ->updateOrInsert(
             [
+                'company_id' =>
+                    $this->data['company_id'],
                 'document_type' =>
                     'CR',
             ],
@@ -532,6 +536,7 @@ class SalesCycleCompanyOwnershipTest extends TestCase
         */
 
         $this->createDocumentSequence(
+            companyId: $this->data['company_id'],
             documentType: 'INV',
             prefix: 'INV'
         );
@@ -1053,6 +1058,7 @@ class SalesCycleCompanyOwnershipTest extends TestCase
     }
 
     private function createDocumentSequence(
+        int $companyId,
         string $documentType,
         string $prefix
     ): void {
@@ -1060,6 +1066,9 @@ class SalesCycleCompanyOwnershipTest extends TestCase
         DB::table(
             'document_sequences'
         )->insert([
+            'company_id' =>
+                $companyId,
+
             'document_type' =>
                 $documentType,
 
@@ -1551,6 +1560,10 @@ class SalesCycleCompanyOwnershipTest extends TestCase
                 'document_sequences'
             )
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'document_type',
                     'SO'
                 )
@@ -1692,6 +1705,10 @@ class SalesCycleCompanyOwnershipTest extends TestCase
             DB::table(
                 'document_sequences'
             )
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->where(
                     'document_type',
                     'SO'

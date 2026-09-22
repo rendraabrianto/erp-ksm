@@ -9,29 +9,6 @@ class InventoryReconciliationTestData
 {
     public static function create(): array
     {
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | Document Sequence
-        |--------------------------------------------------------------------------
-        |
-        | JournalPostingService membutuhkan sequence JV untuk menghasilkan
-        | journal_no melalui DocumentSequenceService.
-        |
-        */
-
-        DB::table('document_sequences')->insert([
-            'document_type'  => 'JV',
-            'prefix'         => 'JV',
-            'description'    => 'Journal Voucher Test Sequence',
-            'current_number' => 0,
-            'padding'        => 5,
-            'is_active'      => true,
-            'created_at'     => now(),
-            'updated_at'     => now(),
-        ]);
-
         /*
         |--------------------------------------------------------------------------
         | Company
@@ -44,6 +21,31 @@ class InventoryReconciliationTestData
             'is_active'  => true,
             'created_at' => now(),
             'updated_at' => now(),
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Document Sequence
+        |--------------------------------------------------------------------------
+        |
+        | JournalPostingService membutuhkan sequence JV untuk menghasilkan
+        | journal_no melalui DocumentSequenceService.
+        |
+        | Sequence harus dimiliki oleh company yang sama dengan transaksi
+        | dan journal yang akan dibuat.
+        |
+        */
+
+        DB::table('document_sequences')->insert([
+            'company_id'     => $companyId,
+            'document_type'  => 'JV',
+            'prefix'         => 'JV',
+            'description'    => 'Journal Voucher Test Sequence',
+            'current_number' => 0,
+            'padding'        => 5,
+            'is_active'      => true,
+            'created_at'     => now(),
+            'updated_at'     => now(),
         ]);
 
         /*

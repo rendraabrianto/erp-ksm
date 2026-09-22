@@ -38,6 +38,8 @@ class CustomerReceiptClosedLoopTest extends TestCase
         DB::table('document_sequences')
             ->updateOrInsert(
                 [
+                    'company_id' =>
+                        $this->data['company_id'],
                     'document_type' =>
                         'CR',
                 ],
@@ -2413,6 +2415,10 @@ class CustomerReceiptClosedLoopTest extends TestCase
             (int)
             DB::table('document_sequences')
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'document_type',
                     'CR'
                 )
@@ -2514,6 +2520,10 @@ class CustomerReceiptClosedLoopTest extends TestCase
         $sequenceAfter =
             (int)
             DB::table('document_sequences')
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->where(
                     'document_type',
                     'CR'

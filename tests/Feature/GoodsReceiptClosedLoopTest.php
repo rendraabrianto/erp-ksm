@@ -36,6 +36,7 @@ class GoodsReceiptClosedLoopTest extends TestCase
             InventoryReconciliationTestData::create();
 
         $this->createDocumentSequence(
+            companyId: $this->data['company_id'],
             documentType: 'GR',
             prefix: 'GR'
         );
@@ -2456,6 +2457,10 @@ class GoodsReceiptClosedLoopTest extends TestCase
         $sequenceBefore =
             DocumentSequence::query()
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'document_type',
                     'GR'
                 )
@@ -2612,6 +2617,10 @@ class GoodsReceiptClosedLoopTest extends TestCase
             $sequenceBefore,
             DocumentSequence::query()
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'document_type',
                     'GR'
                 )
@@ -2735,13 +2744,16 @@ class GoodsReceiptClosedLoopTest extends TestCase
     }
 
     private function createDocumentSequence(
+        int $companyId,
         string $documentType,
         string $prefix
     ): void {
-
         DB::table(
             'document_sequences'
         )->insert([
+            'company_id' =>
+                $companyId,
+
             'document_type' =>
                 $documentType,
 
@@ -2749,9 +2761,7 @@ class GoodsReceiptClosedLoopTest extends TestCase
                 $prefix,
 
             'description' =>
-                $documentType
-                .
-                ' Test Sequence',
+                $documentType . ' Test Sequence',
 
             'current_number' =>
                 0,

@@ -86,16 +86,19 @@ class PurchaseDownstreamCompanyGuardTest extends TestCase
         */
 
         $this->createSequence(
+            $this->data['company_id'],
             'GR',
             'GR'
         );
 
         $this->createSequence(
+            $this->data['company_id'],
             'INV',
             'INV'
         );
 
         $this->createSequence(
+            $this->data['company_id'],
             'PV',
             'PV'
         );
@@ -536,12 +539,15 @@ class PurchaseDownstreamCompanyGuardTest extends TestCase
     */
 
     private function createSequence(
+        int $companyId,
         string $documentType,
         string $prefix
     ): void {
 
         DocumentSequence::firstOrCreate(
             [
+                'company_id' =>
+                    $companyId,
                 'document_type' =>
                     $documentType,
             ],

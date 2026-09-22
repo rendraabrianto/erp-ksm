@@ -123,7 +123,10 @@ class PaymentVoucherService
                         'voucher_no' =>
                             $this
                                 ->documentSequenceService
-                                ->next('PV'),
+                                ->next(
+                                    $companyId,
+                                    'PV'
+                                ),
 
                         'voucher_date' =>
                             now()->toDateString(),

@@ -106,7 +106,10 @@ class DeliveryOrderService
                             'do_no' =>
                                 $this
                                     ->documentSequenceService
-                                    ->next('DO'),
+                                    ->next(
+                                        $companyId,
+                                        'DO'
+                                    ),
 
                             'sales_order_id' =>
                                 $dto->salesOrderId,

@@ -163,6 +163,8 @@ class InventoryAdjustmentClosedLoopTest extends TestCase
 
         DocumentSequence::firstOrCreate(
             [
+                'company_id' =>
+                    $this->data['company_id'],
                 'document_type' =>
                     'ADJ',
             ],

@@ -31,28 +31,34 @@ class PurchaseInvoiceClosedLoopTest extends TestCase
         */
 
         DB::table('document_sequences')
-            ->updateOrInsert(
-                [
-                    'document_type' =>
-                        'INV',
-                ],
-                [
-                    'prefix' =>
-                        'INV',
+        ->updateOrInsert(
+            [
+                'company_id' =>
+                    $this->data['company_id'],
 
-                    'current_number' =>
-                        0,
+                'document_type' =>
+                    'INV',
+            ],
+            [
+                'prefix' =>
+                    'INV',
 
-                    'padding' =>
-                        5,
+                'current_number' =>
+                    0,
 
-                    'created_at' =>
-                        now(),
+                'padding' =>
+                    5,
 
-                    'updated_at' =>
-                        now(),
-                ]
-            );
+                'is_active' =>
+                    true,
+
+                'created_at' =>
+                    now(),
+
+                'updated_at' =>
+                    now(),
+            ]
+        );
     }
 
     public function test_purchase_invoice_uses_company_grni_and_ap_account_mapping(): void
@@ -84,6 +90,9 @@ class PurchaseInvoiceClosedLoopTest extends TestCase
         $alternativeGrniAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $liabilityGroupId,
 
@@ -118,6 +127,9 @@ class PurchaseInvoiceClosedLoopTest extends TestCase
         $alternativeApAccountId =
             DB::table('accounts')
                 ->insertGetId([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $liabilityGroupId,
 
@@ -159,6 +171,10 @@ class PurchaseInvoiceClosedLoopTest extends TestCase
         if (
             !DB::table('accounts')
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'code',
                     '2001'
                 )
@@ -166,6 +182,9 @@ class PurchaseInvoiceClosedLoopTest extends TestCase
         ) {
             DB::table('accounts')
                 ->insert([
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'account_group_id' =>
                         $liabilityGroupId,
 

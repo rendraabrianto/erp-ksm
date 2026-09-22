@@ -3,10 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class DocumentSequence extends Model
 {
     protected $fillable = [
+        'company_id',
         'document_type',
         'prefix',
         'description',
@@ -15,7 +17,18 @@ class DocumentSequence extends Model
         'is_active',
     ];
 
-    protected $casts = [
-        'is_active' => 'boolean',
-    ];
+    protected function casts(): array
+    {
+        return [
+            'company_id' => 'integer',
+            'current_number' => 'integer',
+            'padding' => 'integer',
+            'is_active' => 'boolean',
+        ];
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
 }

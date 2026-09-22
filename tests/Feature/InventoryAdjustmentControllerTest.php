@@ -72,11 +72,17 @@ class InventoryAdjustmentControllerTest extends TestCase
 
         $existingAccount =
             Account::query()
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->firstOrFail();
 
         $gainAccount =
             Account::firstOrCreate(
                 [
+                    'company_id' =>
+                        $this->data['company_id'],
                     'code' => '4901',
                 ],
                 [
@@ -101,6 +107,8 @@ class InventoryAdjustmentControllerTest extends TestCase
         $lossAccount =
             Account::firstOrCreate(
                 [
+                    'company_id' =>
+                        $this->data['company_id'],
                     'code' => '6901',
                 ],
                 [
@@ -158,6 +166,8 @@ class InventoryAdjustmentControllerTest extends TestCase
 
         DocumentSequence::firstOrCreate(
             [
+                'company_id' =>
+                    $this->data['company_id'],
                 'document_type' =>
                     'ADJ',
             ],

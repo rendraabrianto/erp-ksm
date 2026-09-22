@@ -123,7 +123,10 @@ class GoodsReceiptService
                             'gr_no' =>
                                 $this
                                     ->documentSequenceService
-                                    ->next('GR'),
+                                    ->next(
+                                        $companyId,
+                                        'GR'
+                                    ),
 
                             'purchase_order_id' =>
                                 $purchaseOrder->id,

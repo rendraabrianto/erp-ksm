@@ -37,15 +37,32 @@ class PurchaseCycleCompanyOwnershipTest extends TestCase
 
         foreach (['PR', 'PO', 'GR'] as $documentType) {
             DB::table('document_sequences')->insert([
-                'document_type' => $documentType,
-                'prefix' => $documentType,
+                'company_id' =>
+                    $this->data['company_id'],
+
+                'document_type' =>
+                    $documentType,
+
+                'prefix' =>
+                    $documentType,
+
                 'description' =>
                     "{$documentType} Company Ownership Test",
-                'current_number' => 0,
-                'padding' => 5,
-                'is_active' => true,
-                'created_at' => now(),
-                'updated_at' => now(),
+
+                'current_number' =>
+                    0,
+
+                'padding' =>
+                    5,
+
+                'is_active' =>
+                    true,
+
+                'created_at' =>
+                    now(),
+
+                'updated_at' =>
+                    now(),
             ]);
         }
     }
@@ -239,6 +256,10 @@ class PurchaseCycleCompanyOwnershipTest extends TestCase
                 'document_sequences'
             )
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'document_type',
                     'PR'
                 )
@@ -354,6 +375,10 @@ class PurchaseCycleCompanyOwnershipTest extends TestCase
             DB::table(
                 'document_sequences'
             )
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->where(
                     'document_type',
                     'PR'
@@ -1327,6 +1352,10 @@ class PurchaseCycleCompanyOwnershipTest extends TestCase
                 'document_sequences'
             )
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'document_type',
                     'PO'
                 )
@@ -1436,6 +1465,10 @@ class PurchaseCycleCompanyOwnershipTest extends TestCase
                 'document_sequences'
             )
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'document_type',
                     'PO'
                 )
@@ -1480,6 +1513,10 @@ class PurchaseCycleCompanyOwnershipTest extends TestCase
             DB::table(
                 'document_sequences'
             )
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->where(
                     'document_type',
                     'PO'
@@ -1566,6 +1603,10 @@ class PurchaseCycleCompanyOwnershipTest extends TestCase
             DB::table(
                 'document_sequences'
             )
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->where(
                     'document_type',
                     'PO'

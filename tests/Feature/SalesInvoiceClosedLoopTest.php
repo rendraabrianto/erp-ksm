@@ -33,6 +33,9 @@ class SalesInvoiceClosedLoopTest extends TestCase
         DB::table('document_sequences')
             ->updateOrInsert(
                 [
+                    'company_id' =>
+                        $this->data['company_id'],
+
                     'document_type' =>
                         'INV',
                 ],
@@ -325,7 +328,7 @@ class SalesInvoiceClosedLoopTest extends TestCase
                 ->insertGetId([
                     'company_id' =>
                         $this->data['company_id'],
-                        
+
                     'so_no' =>
                         'SO-SI-001',
 
@@ -713,7 +716,7 @@ class SalesInvoiceClosedLoopTest extends TestCase
                 ->insertGetId([
                     'company_id' =>
                         $this->data['company_id'],
-                    
+
                     'account_group_id' =>
                         $revenueGroupId,
 
@@ -1306,7 +1309,7 @@ class SalesInvoiceClosedLoopTest extends TestCase
                 ->insertGetId([
                     'company_id' =>
                         $this->data['company_id'],
-                    
+
                     'code' =>
                         'REV-SI-RB',
 

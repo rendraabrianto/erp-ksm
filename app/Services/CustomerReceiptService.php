@@ -193,7 +193,10 @@ class CustomerReceiptService
 
                     'receipt_no' =>
                         $this->documentSequenceService
-                            ->next('CR'),
+                            ->next(
+                                $companyId,
+                                'CR'
+                            ),
 
                     'customer_id' =>
                         $customer->id,

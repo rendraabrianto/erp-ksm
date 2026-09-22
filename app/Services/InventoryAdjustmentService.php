@@ -71,7 +71,10 @@ class InventoryAdjustmentService
                         'adjustment_no' =>
                             $this
                                 ->documentSequenceService
-                                ->next('ADJ'),
+                                ->next(
+                                    $companyId,
+                                    'ADJ'
+                                ),
 
                         'adjustment_date' =>
                             $dto->adjustmentDate,

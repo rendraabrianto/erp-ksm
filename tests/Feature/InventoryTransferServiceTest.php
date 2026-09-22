@@ -109,6 +109,8 @@ class InventoryTransferServiceTest extends TestCase
 
         DocumentSequence::firstOrCreate(
             [
+                'company_id' =>
+                    $this->data['company_id'],
                 'document_type' =>
                     'TRF',
             ],
@@ -1587,6 +1589,10 @@ class InventoryTransferServiceTest extends TestCase
         $sequenceBefore =
             DocumentSequence::query()
                 ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
+                ->where(
                     'document_type',
                     'TRF'
                 )
@@ -1676,6 +1682,10 @@ class InventoryTransferServiceTest extends TestCase
         $this->assertSame(
             $sequenceBefore,
             DocumentSequence::query()
+                ->where(
+                    'company_id',
+                    $this->data['company_id']
+                )
                 ->where(
                     'document_type',
                     'TRF'

@@ -92,7 +92,10 @@ class SalesOrderService
                             'so_no' =>
                                 $this
                                     ->documentSequenceService
-                                    ->next('SO'),
+                                    ->next(
+                                        $companyId,
+                                        'SO'
+                                    ),
 
                             'customer_id' =>
                                 $customer->id,
