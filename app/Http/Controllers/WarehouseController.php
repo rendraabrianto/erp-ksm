@@ -12,7 +12,13 @@ class WarehouseController extends Controller
 
     public function index()
     {
-        $warehouses = $this->service->paginate();
+        $companyId =
+            (int) auth()->user()->company_id;
+
+        $warehouses =
+            $this->service->paginate(
+                $companyId
+            );
 
         return view(
             'erp.warehouses.index',
