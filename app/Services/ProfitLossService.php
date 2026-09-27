@@ -14,13 +14,16 @@ class ProfitLossService
     ) {}
 
     public function getReport(
+        int $companyId,
         ProfitLossFilterDTO $dto
     ) {
         $rows =
-            $this->repository->getProfitLoss(
-                $dto->dateFrom,
-                $dto->dateTo
-            );
+            $this->repository
+                ->getProfitLoss(
+                    $companyId,
+                    $dto->dateFrom,
+                    $dto->dateTo
+                );
 
         $revenue = 0;
         $cogs = 0;

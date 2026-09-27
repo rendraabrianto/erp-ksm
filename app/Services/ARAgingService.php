@@ -14,11 +14,15 @@ class ARAgingService
     ) {}
 
     public function getReport(
+        int $companyId,
         ARAgingFilterDTO $dto
     ) {
         $receivables =
             $this->repository
-                ->getAging($dto);
+                ->getAging(
+                    $companyId,
+                    $dto
+                );
 
         $current = [];
 

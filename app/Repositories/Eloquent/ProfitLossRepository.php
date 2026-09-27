@@ -5,9 +5,11 @@ namespace App\Repositories\Eloquent;
 use App\Models\JournalDetail;
 use App\Repositories\Contracts\ProfitLossRepositoryInterface;
 
-class ProfitLossRepository implements ProfitLossRepositoryInterface
+class ProfitLossRepository implements
+    ProfitLossRepositoryInterface
 {
     public function getProfitLoss(
+        int $companyId,
         string $dateFrom,
         string $dateTo
     ) {
@@ -24,14 +26,20 @@ class ProfitLossRepository implements ProfitLossRepositoryInterface
             ->whereHas(
                 'journal',
                 function ($q) use (
+                    $companyId,
                     $dateFrom,
                     $dateTo
                 ) {
+                    $q->where(
+                        'company_id',
+                        $companyId
+                    );
+
                     $q->whereBetween(
                         'journal_date',
                         [
                             $dateFrom,
-                            $dateTo
+                            $dateTo,
                         ]
                     );
                 }
@@ -39,7 +47,13 @@ class ProfitLossRepository implements ProfitLossRepositoryInterface
 
             ->whereHas(
                 'account',
-                function ($q) {
+                function ($q) use (
+                    $companyId
+                ) {
+                    $q->where(
+                        'company_id',
+                        $companyId
+                    );
 
                     $q->where(function ($q) {
 
@@ -47,7 +61,7 @@ class ProfitLossRepository implements ProfitLossRepositoryInterface
                             'code',
                             [
                                 '4000',
-                                '4999'
+                                '4999',
                             ]
                         )
 
@@ -55,7 +69,7 @@ class ProfitLossRepository implements ProfitLossRepositoryInterface
                             'code',
                             [
                                 '5000',
-                                '5999'
+                                '5999',
                             ]
                         )
 
@@ -63,7 +77,7 @@ class ProfitLossRepository implements ProfitLossRepositoryInterface
                             'code',
                             [
                                 '6000',
-                                '6999'
+                                '6999',
                             ]
                         );
                     });

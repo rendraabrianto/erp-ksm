@@ -32,6 +32,7 @@ class InventoryValuationServiceTest extends TestCase
             app(
                 InventoryValuationReportService::class
             )->report(
+                $this->data['company_id'],
                 new InventoryValuationFilterDTO(
                     warehouseId:
                         $this->data[
@@ -76,6 +77,7 @@ class InventoryValuationServiceTest extends TestCase
             app(
                 InventoryValuationReportService::class
             )->report(
+                $this->data['company_id'],
                 new InventoryValuationFilterDTO(
                     warehouseId:
                         $this->data[
@@ -118,6 +120,7 @@ class InventoryValuationServiceTest extends TestCase
             app(
                 InventoryValuationReportService::class
             )->report(
+                $this->data['company_id'],
                 new InventoryValuationFilterDTO(
                     warehouseId:
                         $this->data[
@@ -146,6 +149,7 @@ class InventoryValuationServiceTest extends TestCase
             app(
                 InventoryValuationReportService::class
             )->report(
+                $this->data['company_id'],
                 new InventoryValuationFilterDTO(
                     warehouseId:
                         $this->data[
@@ -163,6 +167,7 @@ class InventoryValuationServiceTest extends TestCase
             app(
                 CurrentStockService::class
             )->report(
+                $this->data['company_id'],
                 new CurrentStockFilterDTO(
                     warehouseId:
                         $this->data[
@@ -209,6 +214,7 @@ class InventoryValuationServiceTest extends TestCase
             app(
                 InventoryValuationReportService::class
             )->report(
+                $this->data['company_id'],
                 new InventoryValuationFilterDTO(
                     warehouseId:
                         $this->data[
@@ -229,6 +235,7 @@ class InventoryValuationServiceTest extends TestCase
             app(
                 CurrentStockService::class
             )->report(
+                $this->data['company_id'],
                 new CurrentStockFilterDTO(
                     warehouseId:
                         $this->data[

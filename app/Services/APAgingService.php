@@ -16,12 +16,15 @@ class APAgingService
     ) {}
 
     public function getReport(
+        int $companyId,
         APAgingFilterDTO $dto
     ) {
         $payables =
             $this->repository
-                ->getAging($dto);
-
+                ->getAging(
+                    $companyId,
+                    $dto
+                );
         $current = [];
         $days1To30 = [];
         $days31To60 = [];

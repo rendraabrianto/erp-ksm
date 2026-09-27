@@ -5,10 +5,11 @@ namespace App\Repositories\Eloquent;
 use App\Models\JournalDetail;
 use App\Repositories\Contracts\TrialBalanceRepositoryInterface;
 
-class TrialBalanceRepository
-implements TrialBalanceRepositoryInterface
+class TrialBalanceRepository implements
+    TrialBalanceRepositoryInterface
 {
     public function getTrialBalance(
+        int $companyId,
         string $dateFrom,
         string $dateTo
     ) {
@@ -25,15 +26,33 @@ implements TrialBalanceRepositoryInterface
             ->whereHas(
                 'journal',
                 function ($q) use (
+                    $companyId,
                     $dateFrom,
                     $dateTo
                 ) {
+                    $q->where(
+                        'company_id',
+                        $companyId
+                    );
+
                     $q->whereBetween(
                         'journal_date',
                         [
                             $dateFrom,
-                            $dateTo
+                            $dateTo,
                         ]
+                    );
+                }
+            )
+
+            ->whereHas(
+                'account',
+                function ($q) use (
+                    $companyId
+                ) {
+                    $q->where(
+                        'company_id',
+                        $companyId
                     );
                 }
             )

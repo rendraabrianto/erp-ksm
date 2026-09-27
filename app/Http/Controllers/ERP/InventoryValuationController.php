@@ -8,6 +8,7 @@ use App\Models\Item;
 use App\Models\Warehouse;
 use App\Services\InventoryValuationReportService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class InventoryValuationController extends Controller
@@ -19,19 +20,39 @@ class InventoryValuationController extends Controller
     public function index(
         Request $request
     ): View {
+        $companyId =
+            (int) $request->user()->company_id;
 
         $validated =
             $request->validate([
                 'warehouse_id' => [
                     'nullable',
                     'integer',
-                    'exists:warehouses,id',
+                    Rule::exists(
+                        'warehouses',
+                        'id'
+                    )->where(
+                        fn ($query) =>
+                            $query->where(
+                                'company_id',
+                                $companyId
+                            )
+                    ),
                 ],
 
                 'item_id' => [
                     'nullable',
                     'integer',
-                    'exists:items,id',
+                    Rule::exists(
+                        'items',
+                        'id'
+                    )->where(
+                        fn ($query) =>
+                            $query->where(
+                                'company_id',
+                                $companyId
+                            )
+                    ),
                 ],
 
                 'as_of_date' => [
@@ -59,17 +80,34 @@ class InventoryValuationController extends Controller
 
         $result =
             $this->service
-                ->report($dto);
+                ->report(
+                    $companyId,
+                    $dto
+                );
 
         $warehouses =
             Warehouse::query()
-                ->where('is_active', true)
+                ->where(
+                    'company_id',
+                    $companyId
+                )
+                ->where(
+                    'is_active',
+                    true
+                )
                 ->orderBy('code')
                 ->get();
 
         $items =
             Item::query()
-                ->where('is_active', true)
+                ->where(
+                    'company_id',
+                    $companyId
+                )
+                ->where(
+                    'is_active',
+                    true
+                )
                 ->orderBy('code')
                 ->get();
 

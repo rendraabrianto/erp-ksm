@@ -10,6 +10,7 @@ class BalanceSheetRepository
 implements BalanceSheetRepositoryInterface
 {
     public function getBalances(
+        int $companyId,
         BalanceSheetFilterDTO $dto
     ) {
         return JournalDetail::query()
@@ -24,7 +25,14 @@ implements BalanceSheetRepositoryInterface
 
             ->whereHas(
                 'journal',
-                function ($q) use ($dto) {
+                function ($q) use (
+                    $companyId,
+                    $dto
+                ) {
+                    $q->where(
+                        'company_id',
+                        $companyId
+                    );
 
                     $q->where(
                         'journal_date',
@@ -36,7 +44,13 @@ implements BalanceSheetRepositoryInterface
 
             ->whereHas(
                 'account',
-                function ($q) {
+                function ($q) use (
+                    $companyId
+                ) {
+                    $q->where(
+                        'company_id',
+                        $companyId
+                    );
 
                     $q->where(function ($q) {
 

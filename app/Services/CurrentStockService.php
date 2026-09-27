@@ -47,12 +47,16 @@ class CurrentStockService
      * filtering dan historical as-of date.
      */
     public function report(
+        int $companyId,
         CurrentStockFilterDTO $dto
     ): array {
 
         $ledgers =
             $this->repository
-                ->getCurrentStocks($dto);
+                ->getCurrentStocks(
+                    $companyId,
+                    $dto
+                );
 
         $stocks =
             $ledgers

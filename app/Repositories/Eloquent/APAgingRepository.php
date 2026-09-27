@@ -6,13 +6,19 @@ use App\DTO\APAgingFilterDTO;
 use App\Models\AccountPayable;
 use App\Repositories\Contracts\APAgingRepositoryInterface;
 
-class APAgingRepository
-implements APAgingRepositoryInterface
+class APAgingRepository implements
+    APAgingRepositoryInterface
 {
     public function getAging(
+        int $companyId,
         APAgingFilterDTO $dto
     ) {
         return AccountPayable::query()
+
+            ->where(
+                'company_id',
+                $companyId
+            )
 
             ->where(
                 'invoice_date',

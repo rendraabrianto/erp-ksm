@@ -245,6 +245,7 @@ class InventoryAdjustmentClosedLoopTest extends TestCase
             app(
                 CurrentStockService::class
             )->report(
+                $this->data['company_id'],
                 new CurrentStockFilterDTO(
                     warehouseId:
                         $this->data['warehouse_id'],
@@ -292,6 +293,7 @@ class InventoryAdjustmentClosedLoopTest extends TestCase
             app(
                 InventoryValuationReportService::class
             )->report(
+                $this->data['company_id'],
                 new InventoryValuationFilterDTO(
                     warehouseId:
                         $this->data['warehouse_id'],
@@ -351,6 +353,7 @@ class InventoryAdjustmentClosedLoopTest extends TestCase
             app(
                 CurrentStockService::class
             )->report(
+                $this->data['company_id'],
                 new CurrentStockFilterDTO(
                     warehouseId:
                         $this->data['warehouse_id'],
@@ -378,6 +381,7 @@ class InventoryAdjustmentClosedLoopTest extends TestCase
             app(
                 CurrentStockService::class
             )->report(
+                $this->data['company_id'],
                 new CurrentStockFilterDTO(
                     warehouseId:
                         $this->data['warehouse_id'],
@@ -409,6 +413,7 @@ class InventoryAdjustmentClosedLoopTest extends TestCase
             app(
                 CurrentStockService::class
             )->report(
+                $this->data['company_id'],
                 new CurrentStockFilterDTO(
                     warehouseId:
                         $this->data['warehouse_id'],
@@ -552,6 +557,7 @@ class InventoryAdjustmentClosedLoopTest extends TestCase
             app(
                 CurrentStockService::class
             )->report(
+                $this->data['company_id'],
                 new CurrentStockFilterDTO(
                     warehouseId:
                         $this->data['warehouse_id'],
@@ -594,6 +600,7 @@ class InventoryAdjustmentClosedLoopTest extends TestCase
             app(
                 CurrentStockService::class
             )->report(
+                $this->data['company_id'],
                 new CurrentStockFilterDTO(
                     warehouseId:
                         $this->data['warehouse_id'],

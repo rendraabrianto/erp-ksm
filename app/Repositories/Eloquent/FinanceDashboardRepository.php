@@ -4,22 +4,27 @@ namespace App\Repositories\Eloquent;
 
 use App\DTO\FinanceDashboardFilterDTO;
 use App\Models\Account;
-use App\Models\Item;
 use App\Models\StockLedger;
 use App\Repositories\Contracts\FinanceDashboardRepositoryInterface;
 
 class FinanceDashboardRepository
-implements FinanceDashboardRepositoryInterface
+    implements FinanceDashboardRepositoryInterface
 {
     /**
      * Cash + Bank position.
      *
-     * Semua akun 1000-1099 dianggap cash/bank account.
+     * Semua akun 1001-1099 dianggap cash/bank account.
      */
     public function getCashPosition(
+        int $companyId,
         FinanceDashboardFilterDTO $dto
     ) {
         return Account::query()
+
+            ->where(
+                'company_id',
+                $companyId
+            )
 
             ->whereBetween(
                 'code',
@@ -34,11 +39,20 @@ implements FinanceDashboardRepositoryInterface
             ])
 
             ->withSum([
-                'journalDetails as total_debit' => function ($q) use ($dto) {
-
+                'journalDetails as total_debit' => function ($q) use (
+                    $companyId,
+                    $dto
+                ) {
                     $q->whereHas(
                         'journal',
-                        function ($journal) use ($dto) {
+                        function ($journal) use (
+                            $companyId,
+                            $dto
+                        ) {
+                            $journal->where(
+                                'company_id',
+                                $companyId
+                            );
 
                             $journal->where(
                                 'journal_date',
@@ -51,11 +65,20 @@ implements FinanceDashboardRepositoryInterface
             ], 'debit')
 
             ->withSum([
-                'journalDetails as total_credit' => function ($q) use ($dto) {
-
+                'journalDetails as total_credit' => function ($q) use (
+                    $companyId,
+                    $dto
+                ) {
                     $q->whereHas(
                         'journal',
-                        function ($journal) use ($dto) {
+                        function ($journal) use (
+                            $companyId,
+                            $dto
+                        ) {
+                            $journal->where(
+                                'company_id',
+                                $companyId
+                            );
 
                             $journal->where(
                                 'journal_date',
@@ -96,18 +119,22 @@ implements FinanceDashboardRepositoryInterface
             });
     }
 
-
-
     /**
      * Low stock.
      *
      * Membandingkan balance stok terakhir
      * dengan minimum_stock.
      */
-    public function getLowStockItems()
-    {
+    public function getLowStockItems(
+        int $companyId
+    ) {
         $latestIds =
             StockLedger::query()
+
+                ->where(
+                    'company_id',
+                    $companyId
+                )
 
                 ->selectRaw(
                     'MAX(id)'
@@ -123,9 +150,26 @@ implements FinanceDashboardRepositoryInterface
 
                 ->with('item')
 
+                ->where(
+                    'company_id',
+                    $companyId
+                )
+
                 ->whereIn(
                     'id',
                     $latestIds
+                )
+
+                ->whereHas(
+                    'item',
+                    function ($q) use (
+                        $companyId
+                    ) {
+                        $q->where(
+                            'company_id',
+                            $companyId
+                        );
+                    }
                 )
 
                 ->get();
@@ -186,9 +230,15 @@ implements FinanceDashboardRepositoryInterface
      * Khusus akun 1002 dst yang negatif.
      */
     public function getBankNegativeAccounts(
+        int $companyId,
         FinanceDashboardFilterDTO $dto
     ) {
         return Account::query()
+
+            ->where(
+                'company_id',
+                $companyId
+            )
 
             ->whereBetween(
                 'code',
@@ -199,11 +249,20 @@ implements FinanceDashboardRepositoryInterface
             )
 
             ->withSum([
-                'journalDetails as total_debit' => function ($q) use ($dto) {
-
+                'journalDetails as total_debit' => function ($q) use (
+                    $companyId,
+                    $dto
+                ) {
                     $q->whereHas(
                         'journal',
-                        function ($journal) use ($dto) {
+                        function ($journal) use (
+                            $companyId,
+                            $dto
+                        ) {
+                            $journal->where(
+                                'company_id',
+                                $companyId
+                            );
 
                             $journal->where(
                                 'journal_date',
@@ -216,11 +275,20 @@ implements FinanceDashboardRepositoryInterface
             ], 'debit')
 
             ->withSum([
-                'journalDetails as total_credit' => function ($q) use ($dto) {
-
+                'journalDetails as total_credit' => function ($q) use (
+                    $companyId,
+                    $dto
+                ) {
                     $q->whereHas(
                         'journal',
-                        function ($journal) use ($dto) {
+                        function ($journal) use (
+                            $companyId,
+                            $dto
+                        ) {
+                            $journal->where(
+                                'company_id',
+                                $companyId
+                            );
 
                             $journal->where(
                                 'journal_date',

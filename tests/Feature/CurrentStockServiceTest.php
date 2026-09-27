@@ -46,6 +46,7 @@ class CurrentStockServiceTest extends TestCase
             app(
                 CurrentStockService::class
             )->report(
+                $this->data['company_id'],
                 new CurrentStockFilterDTO(
                     warehouseId:
                         $this->data['warehouse_id'],
@@ -86,6 +87,7 @@ class CurrentStockServiceTest extends TestCase
             app(
                 CurrentStockService::class
             )->report(
+                $this->data['company_id'],
                 new CurrentStockFilterDTO(
                     warehouseId:
                         $this->data['warehouse_id'],
@@ -124,6 +126,7 @@ class CurrentStockServiceTest extends TestCase
             app(
                 CurrentStockService::class
             )->report(
+                $this->data['company_id'],
                 new CurrentStockFilterDTO(
                     warehouseId:
                         $this->data['warehouse_id'],
@@ -148,6 +151,7 @@ class CurrentStockServiceTest extends TestCase
             app(
                 CurrentStockService::class
             )->report(
+                $this->data['company_id'],
                 new CurrentStockFilterDTO(
                     warehouseId:
                         $this->data['warehouse_id'],

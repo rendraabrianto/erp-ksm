@@ -12,12 +12,14 @@ class InventoryValuationReportService
     ) {}
 
     public function report(
+        int $companyId,
         InventoryValuationFilterDTO $dto
     ): array {
 
         $currentStock =
             $this->currentStockService
                 ->report(
+                    $companyId,
                     new CurrentStockFilterDTO(
                         warehouseId:
                             $dto->warehouseId,

@@ -26,6 +26,7 @@ class FinanceDashboardService
     ) {}
 
     public function getDashboard(
+        int $companyId,
         FinanceDashboardFilterDTO $dto
     ) {
         /*
@@ -38,6 +39,7 @@ class FinanceDashboardService
             $this
                 ->repository
                 ->getCashPosition(
+                    $companyId,
                     $dto
                 );
 
@@ -63,6 +65,7 @@ class FinanceDashboardService
             $this
                 ->inventoryValuationReportService
                 ->report(
+                    $companyId,
                     new InventoryValuationFilterDTO(
                         warehouseId:
                             null,
@@ -85,6 +88,7 @@ class FinanceDashboardService
             $this
                 ->profitLossService
                 ->getReport(
+                    $companyId,
                     new ProfitLossFilterDTO(
 
                         dateFrom:
@@ -105,6 +109,7 @@ class FinanceDashboardService
             $this
                 ->arAgingService
                 ->getReport(
+                    $companyId,
                     new ARAgingFilterDTO(
 
                         asOfDate:
@@ -122,6 +127,7 @@ class FinanceDashboardService
             $this
                 ->apAgingService
                 ->getReport(
+                    $companyId,
                     new APAgingFilterDTO(
 
                         asOfDate:
@@ -138,7 +144,9 @@ class FinanceDashboardService
         $lowStock =
             $this
                 ->repository
-                ->getLowStockItems();
+                ->getLowStockItems(
+                    $companyId
+                );
 
         /*
         |--------------------------------------------------------------------------
@@ -150,6 +158,7 @@ class FinanceDashboardService
             $this
                 ->repository
                 ->getBankNegativeAccounts(
+                    $companyId,
                     $dto
                 );
 

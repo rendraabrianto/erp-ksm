@@ -14,11 +14,15 @@ class CashFlowService
     ) {}
 
     public function getReport(
+        int $companyId,
         CashFlowFilterDTO $dto
     ) {
         $transactions =
             $this->repository
-                ->getCashTransactions($dto);
+                ->getCashTransactions(
+                    $companyId,
+                    $dto
+                );
 
         $operating = [];
 

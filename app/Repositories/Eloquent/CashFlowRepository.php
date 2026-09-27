@@ -6,28 +6,35 @@ use App\DTO\CashFlowFilterDTO;
 use App\Models\JournalDetail;
 use App\Repositories\Contracts\CashFlowRepositoryInterface;
 
-class CashFlowRepository
-implements CashFlowRepositoryInterface
+class CashFlowRepository implements
+    CashFlowRepositoryInterface
 {
     public function getCashTransactions(
+        int $companyId,
         CashFlowFilterDTO $dto
     ) {
         return JournalDetail::query()
 
             ->with([
                 'journal',
-                'account'
+                'account',
             ])
 
             ->whereHas(
                 'account',
-                function ($q) {
+                function ($q) use (
+                    $companyId
+                ) {
+                    $q->where(
+                        'company_id',
+                        $companyId
+                    );
 
                     $q->whereBetween(
                         'code',
                         [
                             '1001',
-                            '1099'
+                            '1099',
                         ]
                     );
                 }
@@ -35,13 +42,20 @@ implements CashFlowRepositoryInterface
 
             ->whereHas(
                 'journal',
-                function ($q) use ($dto) {
+                function ($q) use (
+                    $companyId,
+                    $dto
+                ) {
+                    $q->where(
+                        'company_id',
+                        $companyId
+                    );
 
                     $q->whereBetween(
                         'journal_date',
                         [
                             $dto->dateFrom,
-                            $dto->dateTo
+                            $dto->dateTo,
                         ]
                     );
                 }

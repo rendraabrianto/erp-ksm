@@ -98,6 +98,7 @@ class StockLedgerServiceTest extends TestCase
             app(
                 CurrentStockService::class
             )->report(
+                $this->data['company_id'],
                 new CurrentStockFilterDTO(
                     warehouseId:
                         $this->data[

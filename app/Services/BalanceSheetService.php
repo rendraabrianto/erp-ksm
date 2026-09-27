@@ -16,11 +16,15 @@ class BalanceSheetService
     ) {}
 
     public function getReport(
+        int $companyId,
         BalanceSheetFilterDTO $dto
     ) {
         $rows =
             $this->repository
-                ->getBalances($dto);
+                ->getBalances(
+                    $companyId,
+                    $dto
+                );
 
         $assets = [];
 
@@ -161,12 +165,12 @@ class BalanceSheetService
         $profitLoss =
             $this->profitLossService
                 ->getReport(
+                    $companyId,
                     new \App\DTO\ProfitLossFilterDTO(
-
-                        dateFrom :
+                        dateFrom:
                             $dto->dateFrom,
 
-                        dateTo :
+                        dateTo:
                             $dto->dateTo
                     )
                 );

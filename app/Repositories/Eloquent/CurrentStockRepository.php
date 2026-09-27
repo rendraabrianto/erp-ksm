@@ -10,6 +10,7 @@ class CurrentStockRepository implements
     CurrentStockRepositoryInterface
 {
     public function getCurrentStocks(
+        int $companyId,
         CurrentStockFilterDTO $dto
     ) {
         $query =
@@ -17,7 +18,11 @@ class CurrentStockRepository implements
                 ->with([
                     'warehouse',
                     'item',
-                ]);
+                ])
+                ->where(
+                    'company_id',
+                    $companyId
+                );
 
         if ($dto->warehouseId !== null) {
             $query->where(

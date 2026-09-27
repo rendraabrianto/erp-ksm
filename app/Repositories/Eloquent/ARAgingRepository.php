@@ -6,10 +6,11 @@ use App\DTO\ARAgingFilterDTO;
 use App\Models\AccountReceivable;
 use App\Repositories\Contracts\ARAgingRepositoryInterface;
 
-class ARAgingRepository
-implements ARAgingRepositoryInterface
+class ARAgingRepository implements
+    ARAgingRepositoryInterface
 {
     public function getAging(
+        int $companyId,
         ARAgingFilterDTO $dto
     ) {
         return AccountReceivable::query()
@@ -18,6 +19,11 @@ implements ARAgingRepositoryInterface
                 'customer',
                 'salesInvoice',
             ])
+
+            ->where(
+                'company_id',
+                $companyId
+            )
 
             ->where(
                 'invoice_date',
@@ -33,11 +39,25 @@ implements ARAgingRepositoryInterface
 
             ->when(
                 $dto->customerId,
-                function ($q) use ($dto) {
-
+                function ($q) use (
+                    $dto,
+                    $companyId
+                ) {
                     $q->where(
                         'customer_id',
                         $dto->customerId
+                    );
+
+                    $q->whereHas(
+                        'customer',
+                        function ($customer) use (
+                            $companyId
+                        ) {
+                            $customer->where(
+                                'company_id',
+                                $companyId
+                            );
+                        }
                     );
                 }
             )
