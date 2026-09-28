@@ -6,13 +6,29 @@ use App\Models\User;
 
 interface UserRepositoryInterface
 {
-    public function paginate(int $perPage = 10);
+    public function paginate(
+        int $companyId,
+        int $perPage = 10
+    );
 
-    public function find(int $id): ?User;
+    public function find(
+        int $companyId,
+        int $id
+    ): ?User;
 
-    public function create(array $data): User;
+    public function create(
+        int $companyId,
+        array $data
+    ): User;
 
-    public function update(User $user, array $data): bool;
+    public function update(
+        int $companyId,
+        User $user,
+        array $data
+    ): bool;
 
-    public function delete(User $user): bool;
+    public function delete(
+        int $companyId,
+        User $user
+    ): bool;
 }

@@ -26,6 +26,9 @@ class InventoryHistoricalReconciliationTest extends TestCase
         InventoryHistoricalReconciliationDTO
     {
         return new InventoryHistoricalReconciliationDTO(
+            companyId:
+            $this->data['company_id'],
+
             warehouseId:
                 $this->data['warehouse_id'],
 

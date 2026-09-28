@@ -11,9 +11,12 @@ class DashboardService
         private DashboardRepositoryInterface $repository
     ) {}
 
-    public function getDashboardData(): DashboardData
-    {
-        $data = $this->repository->getStatistics();
+    public function getDashboardData(
+        int $companyId
+    ): DashboardData {
+        $data = $this->repository->getStatistics(
+            $companyId
+        );
 
         return new DashboardData(
             companies: $data['companies'],

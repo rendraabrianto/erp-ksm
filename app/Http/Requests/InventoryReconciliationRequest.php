@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class InventoryReconciliationRequest extends FormRequest
 {
@@ -13,17 +14,33 @@ class InventoryReconciliationRequest extends FormRequest
 
     public function rules(): array
     {
+        $companyId = (int) $this->user()->company_id;
+
         return [
             'warehouse_id' => [
                 'required',
                 'integer',
-                'exists:warehouses,id',
+                Rule::exists('warehouses', 'id')
+                    ->where(
+                        fn ($query) =>
+                            $query->where(
+                                'company_id',
+                                $companyId
+                            )
+                    ),
             ],
 
             'item_id' => [
                 'required',
                 'integer',
-                'exists:items,id',
+                Rule::exists('items', 'id')
+                    ->where(
+                        fn ($query) =>
+                            $query->where(
+                                'company_id',
+                                $companyId
+                            )
+                    ),
             ],
 
             'date_from' => [

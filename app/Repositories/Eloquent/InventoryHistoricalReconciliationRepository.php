@@ -10,23 +10,24 @@ use App\Models\StockLedger;
 use App\Repositories\Contracts\InventoryHistoricalReconciliationRepositoryInterface;
 
 class InventoryHistoricalReconciliationRepository
-implements InventoryHistoricalReconciliationRepositoryInterface
+    implements InventoryHistoricalReconciliationRepositoryInterface
 {
     public function getStockLedgers(
         InventoryHistoricalReconciliationDTO $dto
     ) {
         return StockLedger::query()
-
+            ->where(
+                'company_id',
+                $dto->companyId
+            )
             ->where(
                 'warehouse_id',
                 $dto->warehouseId
             )
-
             ->where(
                 'item_id',
                 $dto->itemId
             )
-
             ->whereBetween(
                 'transaction_date',
                 [
@@ -34,9 +35,7 @@ implements InventoryHistoricalReconciliationRepositoryInterface
                     $dto->dateTo . ' 23:59:59',
                 ]
             )
-
             ->orderBy('id')
-
             ->get();
     }
 
@@ -44,9 +43,11 @@ implements InventoryHistoricalReconciliationRepositoryInterface
         InventoryHistoricalReconciliationDTO $dto
     ) {
         return GoodsReceipt::query()
-
             ->with('details')
-
+            ->where(
+                'company_id',
+                $dto->companyId
+            )
             ->whereBetween(
                 'receipt_date',
                 [
@@ -54,20 +55,16 @@ implements InventoryHistoricalReconciliationRepositoryInterface
                     $dto->dateTo,
                 ]
             )
-
             ->whereHas(
                 'details',
                 function ($q) use ($dto) {
-
                     $q->where(
                         'item_id',
                         $dto->itemId
                     );
                 }
             )
-
             ->orderBy('id')
-
             ->get();
     }
 
@@ -75,9 +72,11 @@ implements InventoryHistoricalReconciliationRepositoryInterface
         InventoryHistoricalReconciliationDTO $dto
     ) {
         return DeliveryOrder::query()
-
             ->with('details')
-
+            ->where(
+                'company_id',
+                $dto->companyId
+            )
             ->whereBetween(
                 'delivery_date',
                 [
@@ -85,20 +84,16 @@ implements InventoryHistoricalReconciliationRepositoryInterface
                     $dto->dateTo,
                 ]
             )
-
             ->whereHas(
                 'details',
                 function ($q) use ($dto) {
-
                     $q->where(
                         'item_id',
                         $dto->itemId
                     );
                 }
             )
-
             ->orderBy('id')
-
             ->get();
     }
 
@@ -106,9 +101,11 @@ implements InventoryHistoricalReconciliationRepositoryInterface
         InventoryHistoricalReconciliationDTO $dto
     ) {
         return Journal::query()
-
             ->with('details')
-
+            ->where(
+                'company_id',
+                $dto->companyId
+            )
             ->whereBetween(
                 'journal_date',
                 [
@@ -116,7 +113,6 @@ implements InventoryHistoricalReconciliationRepositoryInterface
                     $dto->dateTo,
                 ]
             )
-
             ->whereIn(
                 'reference_type',
                 [
@@ -124,9 +120,7 @@ implements InventoryHistoricalReconciliationRepositoryInterface
                     'DELIVERY_ORDER',
                 ]
             )
-
             ->orderBy('id')
-
             ->get();
     }
 }

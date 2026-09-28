@@ -2,33 +2,64 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\UserService;
-use App\Models\Company;
-use App\Models\Branch;
-use Spatie\Permission\Models\Role;
 use App\Http\Requests\StoreUserRequest;
+use App\Models\Branch;
+use App\Services\UserService;
+use Illuminate\Http\Request;
+use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
     public function __construct(
         private UserService $service
     ) {}
-    
-    public function create()
+
+    public function index(Request $request)
     {
+        $companyId = (int) $request->user()->company_id;
+
+        $users = $this->service->paginate(
+            $companyId
+        );
+
+        return view(
+            'erp.users.index',
+            compact('users')
+        );
+    }
+
+    public function create(Request $request)
+    {
+        $companyId = (int) $request->user()->company_id;
+
+        $branches = Branch::query()
+            ->where('company_id', $companyId)
+            ->orderBy('name')
+            ->get();
+
+        /*
+         * Roles are global authorization configuration
+         * in the current ERP architecture.
+         */
+        $roles = Role::query()
+            ->orderBy('name')
+            ->get();
+
         return view(
             'erp.users.create',
-            [
-                'companies' => Company::all(),
-                'branches' => Branch::all(),
-                'roles' => Role::all(),
-            ]
+            compact(
+                'branches',
+                'roles'
+            )
         );
     }
 
     public function store(StoreUserRequest $request)
     {
+        $companyId = (int) $request->user()->company_id;
+
         $this->service->create(
+            $companyId,
             $request->validated()
         );
 
@@ -38,15 +69,5 @@ class UserController extends Controller
                 'success',
                 'User created successfully'
             );
-    }
-
-    public function index()
-    {
-        $users = $this->service->paginate();
-
-        return view(
-            'erp.users.index',
-            compact('users')
-        );
     }
 }

@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\BranchService;
-
+use Illuminate\Http\Request;
 
 class BranchController extends Controller
 {
@@ -11,9 +11,13 @@ class BranchController extends Controller
         private BranchService $service
     ) {}
 
-    public function index()
+    public function index(Request $request)
     {
-        $branches = $this->service->paginate();
+        $companyId = (int) $request->user()->company_id;
+
+        $branches = $this->service->paginate(
+            $companyId
+        );
 
         return view(
             'erp.branches.index',

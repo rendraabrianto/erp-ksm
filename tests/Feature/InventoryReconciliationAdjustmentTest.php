@@ -29,6 +29,9 @@ class InventoryReconciliationAdjustmentTest extends TestCase
 
         $this->dto =
             new InventoryReconciliationAdjustmentDTO(
+                companyId:
+                    $this->data['company_id'],
+
                 warehouseId:
                     $this->data['warehouse_id'],
 
@@ -669,7 +672,7 @@ class InventoryReconciliationAdjustmentTest extends TestCase
         );
     }
 
-    public function test_apply_journals_inherit_company_from_reconciliation_warehouse():
+    public function test_apply_journals_use_reconciliation_company():
         void
     {
         $result =
@@ -825,6 +828,9 @@ class InventoryReconciliationAdjustmentTest extends TestCase
 
         $crossCompanyDto =
             new InventoryReconciliationAdjustmentDTO(
+                companyId:
+                    $this->data['company_id'],
+
                 warehouseId:
                     $this->data['warehouse_id'],
 
@@ -871,7 +877,7 @@ class InventoryReconciliationAdjustmentTest extends TestCase
         } catch (\RuntimeException $exception) {
 
             $this->assertSame(
-                'One or more reconciliation accounts do not belong to the warehouse company.',
+                'One or more reconciliation accounts do not belong to reconciliation company.',
                 $exception->getMessage()
             );
         }

@@ -30,6 +30,9 @@ class InventoryReconciliationClosedLoopTest extends TestCase
 
         $this->historicalDto =
             new InventoryHistoricalReconciliationDTO(
+                companyId:
+                    $this->data['company_id'],
+
                 warehouseId:
                     $this->data['warehouse_id'],
 
@@ -48,6 +51,8 @@ class InventoryReconciliationClosedLoopTest extends TestCase
 
         $this->adjustmentDto =
             new InventoryReconciliationAdjustmentDTO(
+                companyId:
+                    $this->data['company_id'],
                 warehouseId:
                     $this->data['warehouse_id'],
 

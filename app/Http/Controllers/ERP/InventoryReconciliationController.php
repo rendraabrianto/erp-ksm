@@ -25,15 +25,20 @@ class InventoryReconciliationController extends Controller
         private AccountingAccountResolverService $accountResolver,
     ) {}
 
-    public function index()
-    {
+    public function index(
+        Request $request
+    ) {
+        $companyId = (int) $request->user()->company_id;
+
         $warehouses = Warehouse::query()
+            ->where('company_id', $companyId)
             ->where('is_active', true)
             ->orderBy('name')
             ->get();
 
         $items = Item::query()
             ->with('category')
+            ->where('company_id', $companyId)
             ->where('is_active', true)
             ->orderBy('name')
             ->get();
@@ -50,8 +55,10 @@ class InventoryReconciliationController extends Controller
     public function reconcile(
         InventoryReconciliationRequest $request
     ) {
+        $companyId = (int) $request->user()->company_id;
         $item = Item::query()
             ->with('category')
+            ->where('company_id', $companyId)
             ->findOrFail(
                 $request->integer('item_id')
             );
@@ -76,6 +83,9 @@ class InventoryReconciliationController extends Controller
 
         $dto =
             new InventoryHistoricalReconciliationDTO(
+                companyId:
+                    $companyId,
+
                 warehouseId:
                     $request->integer('warehouse_id'),
 
@@ -98,12 +108,14 @@ class InventoryReconciliationController extends Controller
                 ->reconcile($dto);
 
         $warehouses = Warehouse::query()
+            ->where('company_id', $companyId)
             ->where('is_active', true)
             ->orderBy('name')
             ->get();
 
         $items = Item::query()
             ->with('category')
+            ->where('company_id', $companyId)
             ->where('is_active', true)
             ->orderBy('name')
             ->get();
@@ -129,8 +141,10 @@ class InventoryReconciliationController extends Controller
     public function preview(
         InventoryReconciliationRequest $request
     ) {
+        $companyId = (int) $request->user()->company_id;
         $item = Item::query()
             ->with('category')
+            ->where('company_id', $companyId)
             ->findOrFail(
                 $request->integer('item_id')
             );
@@ -152,6 +166,7 @@ class InventoryReconciliationController extends Controller
 
         $warehouse =
             Warehouse::query()
+                ->where('company_id', $companyId)
                 ->findOrFail(
                     $request->integer('warehouse_id')
                 );
@@ -159,11 +174,14 @@ class InventoryReconciliationController extends Controller
         $grni =
             $this->accountResolver
                 ->grni(
-                    (int) $warehouse->company_id
+                    $companyId
                 );
 
         $dto =
             new InventoryReconciliationAdjustmentDTO(
+                companyId:
+                    $companyId,
+
                 warehouseId:
                     $request->integer('warehouse_id'),
 
@@ -206,6 +224,10 @@ class InventoryReconciliationController extends Controller
             ->values();
 
         $accounts = Account::query()
+            ->where(
+                'company_id',
+                $companyId
+            )
             ->whereIn(
                 'id',
                 $accountIds
@@ -236,8 +258,10 @@ class InventoryReconciliationController extends Controller
     public function apply(
         InventoryReconciliationRequest $request
     ) {
+        $companyId = (int) $request->user()->company_id;
         $item = Item::query()
             ->with('category')
+            ->where('company_id', $companyId)
             ->findOrFail(
                 $request->integer('item_id')
             );
@@ -259,6 +283,7 @@ class InventoryReconciliationController extends Controller
 
         $warehouse =
             Warehouse::query()
+                ->where('company_id', $companyId)
                 ->findOrFail(
                     $request->integer('warehouse_id')
                 );
@@ -266,10 +291,13 @@ class InventoryReconciliationController extends Controller
         $grni =
             $this->accountResolver
                 ->grni(
-                    (int) $warehouse->company_id
+                    $companyId
                 );
 
         $dto = new InventoryReconciliationAdjustmentDTO(
+            companyId:
+                $companyId,
+
             warehouseId:
                 $request->integer('warehouse_id'),
 
@@ -299,7 +327,7 @@ class InventoryReconciliationController extends Controller
             $this->historyService
                 ->applyAndRecord(
                     $dto,
-                    auth()->id()
+                    (int) $request->user()->id
                 );
 
         return redirect()
@@ -316,10 +344,18 @@ class InventoryReconciliationController extends Controller
         );
     }
 
-    public function history()
-    {
+    public function history(
+    Request $request
+    ) {
+        $companyId =
+            (int) $request->user()->company_id;
+
         $histories =
             InventoryReconciliationHistory::query()
+                ->where(
+                    'company_id',
+                    $companyId
+                )
                 ->with([
                     'warehouse',
                     'item',
@@ -333,14 +369,28 @@ class InventoryReconciliationController extends Controller
             compact('histories')
         );
     }
+
     public function historyDetail(
-    InventoryReconciliationHistory $history
+        Request $request,
+        int $history
     ) {
-        $history->load([
-            'warehouse',
-            'item',
-            'executor',
-        ]);
+        $companyId =
+            (int) $request->user()->company_id;
+
+        $history =
+            InventoryReconciliationHistory::query()
+                ->where(
+                    'company_id',
+                    $companyId
+                )
+                ->with([
+                    'warehouse',
+                    'item',
+                    'executor',
+                ])
+                ->findOrFail(
+                    $history
+                );
 
         return view(
             'erp.inventory.reconciliation.history-detail',

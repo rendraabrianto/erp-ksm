@@ -3,8 +3,12 @@
 namespace App\Services;
 
 use App\DTO\InventoryHistoricalReconciliationDTO;
+use App\Models\Account;
+use App\Models\Item;
+use App\Models\Warehouse;
 use App\Repositories\Contracts\InventoryHistoricalReconciliationRepositoryInterface;
 use Carbon\Carbon;
+use RuntimeException;
 
 class InventoryHistoricalReconciliationService
 {
@@ -17,6 +21,38 @@ class InventoryHistoricalReconciliationService
     public function reconcile(
         InventoryHistoricalReconciliationDTO $dto
     ) {
+        $warehouseExists = Warehouse::query()
+            ->where('company_id', $dto->companyId)
+            ->whereKey($dto->warehouseId)
+            ->exists();
+
+        if (! $warehouseExists) {
+            throw new RuntimeException(
+                'Warehouse does not belong to reconciliation company.'
+            );
+        }
+
+        $itemExists = Item::query()
+            ->where('company_id', $dto->companyId)
+            ->whereKey($dto->itemId)
+            ->exists();
+
+        if (! $itemExists) {
+            throw new RuntimeException(
+                'Item does not belong to reconciliation company.'
+            );
+        }
+
+        $inventoryAccountExists = Account::query()
+            ->where('company_id', $dto->companyId)
+            ->whereKey($dto->inventoryAccountId)
+            ->exists();
+
+        if (! $inventoryAccountExists) {
+            throw new RuntimeException(
+                'Inventory account does not belong to reconciliation company.'
+            );
+        }
         /*
         |--------------------------------------------------------------------------
         | LOAD DATA

@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreUserRequest extends FormRequest
 {
@@ -13,43 +14,52 @@ class StoreUserRequest extends FormRequest
 
     public function rules(): array
     {
-        return [
+        $companyId = (int) $this->user()->company_id;
 
+        return [
             'name' => [
                 'required',
                 'string',
-                'max:150'
+                'max:150',
             ],
 
             'email' => [
                 'required',
                 'email',
-                'unique:users,email'
+                'unique:users,email',
             ],
 
             'password' => [
                 'required',
-                'min:8'
+                'min:8',
             ],
 
+            /*
+             * Company ownership is derived from the authenticated user.
+             * It must never be accepted from the request payload.
+             */
             'company_id' => [
-                'nullable',
-                'exists:companies,id'
+                'prohibited',
             ],
 
             'branch_id' => [
                 'nullable',
-                'exists:branches,id'
+                Rule::exists('branches', 'id')
+                    ->where(
+                        fn ($query) => $query->where(
+                            'company_id',
+                            $companyId
+                        )
+                    ),
             ],
 
             'role' => [
-                'required'
+                'required',
             ],
 
             'is_active' => [
-                'nullable'
+                'nullable',
             ],
-
         ];
     }
 }

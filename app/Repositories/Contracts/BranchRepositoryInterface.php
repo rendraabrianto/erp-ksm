@@ -6,11 +6,24 @@ use App\Models\Branch;
 
 interface BranchRepositoryInterface
 {
-    public function paginate(int $perPage = 10);
+    public function paginate(
+        int $companyId,
+        int $perPage = 10
+    );
 
-    public function find(int $id): ?Branch;
+    public function find(
+        int $companyId,
+        int $id
+    ): ?Branch;
 
-    public function create(array $data): Branch;
+    public function create(
+        int $companyId,
+        array $data
+    ): Branch;
 
-    public function update(Branch $branch, array $data): bool;
+    public function update(
+        int $companyId,
+        Branch $branch,
+        array $data
+    ): bool;
 }

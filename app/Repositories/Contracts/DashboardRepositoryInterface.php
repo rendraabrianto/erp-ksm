@@ -4,5 +4,7 @@ namespace App\Repositories\Contracts;
 
 interface DashboardRepositoryInterface
 {
-    public function getStatistics(): array;
+    public function getStatistics(
+        int $companyId
+    ): array;
 }

@@ -10,13 +10,27 @@ use Spatie\Permission\Models\Role;
 
 class DashboardRepository implements DashboardRepositoryInterface
 {
-    public function getStatistics(): array
-    {
+    public function getStatistics(
+        int $companyId
+    ): array {
         return [
-            'companies' => Company::count(),
-            'branches'  => Branch::count(),
-            'users'     => User::count(),
-            'roles'     => Role::count(),
+            'companies' => Company::query()
+                ->whereKey($companyId)
+                ->count(),
+
+            'branches' => Branch::query()
+                ->where('company_id', $companyId)
+                ->count(),
+
+            'users' => User::query()
+                ->where('company_id', $companyId)
+                ->count(),
+
+            /*
+             * Roles are global authorization configuration.
+             * They are not company-owned master data.
+             */
+            'roles' => Role::count(),
         ];
     }
 }

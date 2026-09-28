@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\DashboardService;
+use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
@@ -10,10 +11,17 @@ class DashboardController extends Controller
         private DashboardService $service
     ) {}
 
-    public function index()
+    public function index(Request $request)
     {
-        $dashboard = $this->service->getDashboardData();
-        return view('erp.dashboard.index', compact('dashboard'));
-        
+        $companyId = (int) $request->user()->company_id;
+
+        $dashboard = $this->service->getDashboardData(
+            $companyId
+        );
+
+        return view(
+            'erp.dashboard.index',
+            compact('dashboard')
+        );
     }
 }

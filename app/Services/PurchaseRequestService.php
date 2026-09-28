@@ -18,9 +18,14 @@ class PurchaseRequestService
         protected CompanyGuardService $companyGuardService,
     ) {}
 
-    public function paginate()
-    {
-        return $this->repository->paginate();
+    public function paginate(
+        int $companyId,
+        int $perPage = 10
+    ) {
+        return $this->repository->paginate(
+            $companyId,
+            $perPage
+        );
     }
 
     public function create(

@@ -1,11 +1,14 @@
 <?php
 
 namespace App\Services;
+
 use App\DTO\JournalEntryDTO;
 use App\DTO\JournalLineDTO;
 use App\Models\Account;
+use App\Models\Item;
 use App\Models\Warehouse;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 use App\DTO\InventoryHistoricalReconciliationDTO;
 use App\DTO\InventoryReconciliationAdjustmentDTO;
@@ -32,9 +35,54 @@ class InventoryReconciliationAdjustmentService
     public function preview(
         InventoryReconciliationAdjustmentDTO $dto
     ): array {
+        /*
+        |--------------------------------------------------------------------------
+        | COMPANY OWNERSHIP
+        |--------------------------------------------------------------------------
+        */
+
+        $warehouseExists = Warehouse::query()
+            ->where('company_id', $dto->companyId)
+            ->whereKey($dto->warehouseId)
+            ->exists();
+
+        if (! $warehouseExists) {
+            throw new RuntimeException(
+                'Warehouse does not belong to reconciliation company.'
+            );
+        }
+
+        $itemExists = Item::query()
+            ->where('company_id', $dto->companyId)
+            ->whereKey($dto->itemId)
+            ->exists();
+
+        if (! $itemExists) {
+            throw new RuntimeException(
+                'Item does not belong to reconciliation company.'
+            );
+        }
+
+        $accountIds = [
+            $dto->inventoryAccountId,
+            $dto->cogsAccountId,
+            $dto->grniAccountId,
+        ];
+
+        $ownedAccountCount = Account::query()
+            ->where('company_id', $dto->companyId)
+            ->whereIn('id', $accountIds)
+            ->count();
+
+        if ($ownedAccountCount !== count(array_unique($accountIds))) {
+            throw new RuntimeException(
+                'One or more reconciliation accounts do not belong to reconciliation company.'
+            );
+        }
 
         $historicalDto =
             new InventoryHistoricalReconciliationDTO(
+                companyId: $dto->companyId,
                 warehouseId: $dto->warehouseId,
                 itemId: $dto->itemId,
                 dateFrom: $dto->dateFrom,
@@ -238,18 +286,8 @@ class InventoryReconciliationAdjustmentService
                 | REBUILD PREVIEW INSIDE TRANSACTION
                 |--------------------------------------------------------------------------
                 */
-
-                $warehouse =
-                    Warehouse::query()
-                        ->findOrFail(
-                            $dto->warehouseId
-                        );
-
-                $companyId =
-                    (int) $warehouse->company_id;
-
-                $preview =
-                    $this->preview($dto);
+                $companyId = $dto->companyId;
+                $preview = $this->preview($dto);
 
                 if (
                     $preview['proposal_count']
@@ -289,6 +327,10 @@ class InventoryReconciliationAdjustmentService
 
                 $accounts =
                     Account::query()
+                        ->where(
+                            'company_id',
+                            $companyId
+                        )
                         ->whereIn(
                             'id',
                             $accountIds
@@ -316,7 +358,7 @@ class InventoryReconciliationAdjustmentService
 
                 if ($crossCompanyAccounts->isNotEmpty()) {
                     throw new \RuntimeException(
-                        'One or more reconciliation accounts do not belong to the warehouse company.'
+                        'One or more reconciliation accounts do not belong to reconciliation company.'
                     );
                 }
 

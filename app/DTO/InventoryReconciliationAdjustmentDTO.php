@@ -5,6 +5,7 @@ namespace App\DTO;
 class InventoryReconciliationAdjustmentDTO
 {
     public function __construct(
+        public int $companyId,
         public int $warehouseId,
         public int $itemId,
         public string $dateFrom,

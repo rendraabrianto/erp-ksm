@@ -8,6 +8,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 interface PurchaseRequestRepositoryInterface
 {
     public function paginate(
+        int $companyId,
         int $perPage = 10
     ): LengthAwarePaginator;
 
@@ -16,6 +17,7 @@ interface PurchaseRequestRepositoryInterface
     ): PurchaseRequest;
 
     public function find(
+        int $companyId,
         int $id
     ): ?PurchaseRequest;
 }

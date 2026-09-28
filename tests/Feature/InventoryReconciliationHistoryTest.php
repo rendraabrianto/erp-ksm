@@ -27,6 +27,9 @@ class InventoryReconciliationHistoryTest extends TestCase
 
         $this->dto =
             new InventoryReconciliationAdjustmentDTO(
+                companyId:
+                    $this->data['company_id'],
+
                 warehouseId:
                     $this->data['warehouse_id'],
 

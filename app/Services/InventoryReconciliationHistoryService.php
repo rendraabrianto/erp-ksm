@@ -27,6 +27,7 @@ class InventoryReconciliationHistoryService
 
                 $historicalDto =
                     new InventoryHistoricalReconciliationDTO(
+                        companyId: $adjustmentDto->companyId,
                         warehouseId: $adjustmentDto->warehouseId,
                         itemId: $adjustmentDto->itemId,
                         dateFrom: $adjustmentDto->dateFrom,
@@ -69,6 +70,8 @@ class InventoryReconciliationHistoryService
 
                 $history =
                     InventoryReconciliationHistory::create([
+                        'company_id' =>
+                            $adjustmentDto->companyId,
                         'warehouse_id' =>
                             $adjustmentDto->warehouseId,
 

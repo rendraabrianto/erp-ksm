@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class InventoryReconciliationHistory extends Model
 {
     protected $fillable = [
+        'company_id',
         'warehouse_id',
         'item_id',
         'date_from',
@@ -32,6 +33,13 @@ class InventoryReconciliationHistory extends Model
         'is_reconciled_after' => 'boolean',
         'executed_at' => 'datetime',
     ];
+
+    public function company()
+    {
+        return $this->belongsTo(
+            Company::class
+        );
+    }
 
     public function warehouse()
     {

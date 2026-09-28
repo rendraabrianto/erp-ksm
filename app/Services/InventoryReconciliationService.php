@@ -3,8 +3,11 @@
 namespace App\Services;
 
 use App\DTO\InventoryReconciliationFilterDTO;
+use App\Models\Account;
 use App\Models\Item;
+use App\Models\Warehouse;
 use App\Repositories\Contracts\InventoryReconciliationRepositoryInterface;
+use RuntimeException;
 
 class InventoryReconciliationService
 {
@@ -21,14 +24,42 @@ class InventoryReconciliationService
     ) {
         /*
         |--------------------------------------------------------------------------
-        | ITEM
+        | COMPANY OWNERSHIP
         |--------------------------------------------------------------------------
         */
 
-        $item =
-            Item::findOrFail(
-                $dto->itemId
+        $warehouseExists = Warehouse::query()
+            ->where('company_id', $dto->companyId)
+            ->whereKey($dto->warehouseId)
+            ->exists();
+
+        if (! $warehouseExists) {
+            throw new RuntimeException(
+                'Warehouse does not belong to reconciliation company.'
             );
+        }
+
+        $item = Item::query()
+            ->where('company_id', $dto->companyId)
+            ->whereKey($dto->itemId)
+            ->first();
+
+        if (! $item) {
+            throw new RuntimeException(
+                'Item does not belong to reconciliation company.'
+            );
+        }
+
+        $inventoryAccountExists = Account::query()
+            ->where('company_id', $dto->companyId)
+            ->whereKey($dto->inventoryAccountId)
+            ->exists();
+
+        if (! $inventoryAccountExists) {
+            throw new RuntimeException(
+                'Inventory account does not belong to reconciliation company.'
+            );
+        }
 
         /*
         |--------------------------------------------------------------------------
